@@ -341,6 +341,77 @@
             border-left-color: #ffaa00;
         }
 
+        /* Badge Styles */
+        .badge-display {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 20px;
+            background: rgba(0, 255, 0, 0.05);
+            border: 2px solid #00ff00;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+
+        .badge-display #badge-icon {
+            font-size: 3em;
+        }
+
+        .badge-display #badge-name {
+            font-weight: bold;
+            color: #00ff00;
+        }
+
+        .badge-claim-form {
+            margin-top: 20px;
+        }
+
+        .badge-claim-form .form-group {
+            margin-bottom: 16px;
+        }
+
+        .badge-claim-form label {
+            display: block;
+            margin-bottom: 8px;
+            color: #00ddaa;
+            font-weight: bold;
+        }
+
+        .badge-claim-form input,
+        .badge-claim-form select {
+            width: 100%;
+            padding: 10px;
+            background: rgba(0, 255, 0, 0.05);
+            border: 1px solid #00ff00;
+            border-radius: 4px;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .badge-claim-form input:focus,
+        .badge-claim-form select:focus {
+            outline: none;
+            border-color: #00ddaa;
+            box-shadow: 0 0 10px rgba(0, 221, 170, 0.3);
+        }
+
+        .badge-claim-form small {
+            display: block;
+            margin-top: 4px;
+            color: #888;
+            font-size: 0.8em;
+        }
+
+        .status-message {
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 12px;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
         /* Status */
         .status {
             text-align: center;
@@ -1331,6 +1402,62 @@
                 <button onclick="sendDonation()">Send Private Donation</button>
             </div>
 
+            <!-- Badge Section -->
+            <div class="card" id="badge-section" style="display: none;">
+                <div class="card__header">
+                    <h2>🏅 Donation Badges</h2>
+                    <p class="card__subtitle">Prove your generosity without revealing amounts</p>
+                </div>
+                
+                <!-- Current Badge Display -->
+                <div id="current-badge" class="badge-display">
+                    <span id="badge-icon">⚪</span>
+                    <span id="badge-name">No Badge</span>
+                </div>
+                
+                <!-- Claim Badge Form -->
+                <div class="badge-claim-form">
+                    <h3>Claim a Badge</h3>
+                    <p style="font-size: 0.85em; color: #888; margin-bottom: 16px; line-height: 1.5;">
+                        Generate a ZK proof that you donated a minimum amount.<br>
+                        Your actual donation amount stays private!
+                    </p>
+                    
+                    <div class="form-group">
+                        <label>Select Badge Tier:</label>
+                        <select id="badge-tier-select">
+                            <option value="1">🥉 Bronze ($10+ donation)</option>
+                            <option value="2">🥈 Silver ($100+ donation)</option>
+                            <option value="3">🥇 Gold ($1000+ donation)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Your Donation Amount ($):</label>
+                        <input type="number" id="badge-donation-amount" placeholder="e.g., 150" min="10" step="1">
+                        <small style="color: #888;">This amount stays private - only used locally to generate proof</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Your Secret Key:</label>
+                        <input type="password" id="badge-secret" placeholder="A secret only you know">
+                        <small style="color: #888;">Used to bind your identity to the proof. Keep it safe!</small>
+                    </div>
+                    
+                    <button id="generate-badge-proof" onclick="generateBadgeProof()">
+                        🔐 Generate ZK Proof
+                    </button>
+                    
+                    <div id="badge-proof-status" style="display: none; margin-top: 16px;">
+                        <div class="status-message"></div>
+                    </div>
+                    
+                    <button id="claim-badge-btn" onclick="claimBadge()" style="display: none;">
+                        🏅 Claim Badge On-Chain
+                    </button>
+                </div>
+            </div>
+
             <!-- Withdraw -->
             <div class="card">
                 <div class="card__header">
@@ -1412,11 +1539,15 @@
             formatUsdcAmount,
             formatStrkAmount
         } from './avnu-service.ts';
+        import { BadgeService, BadgeTier, BadgeProof } from './badge-service.ts';
+        import { hash } from 'starknet';
         
         let service = null;
         let isInitialized = false;
         let walletAccount = null;
         let tongoPrivateKey = null;
+        let badgeService = null;
+        let pendingBadgeProof = null;
 
         // Get current network from select or localStorage
         function getCurrentNetwork() {
@@ -2431,6 +2562,9 @@
                 addLog(`Tongo service initialized. Public Key: ${service.getPublicKey().slice(0, 20)}...`, 'success');
                 setStatus('Ready', 'success');
                 
+                // Initialize badge service
+                await initBadgeService();
+                
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : 'Unknown error';
                 const errorStack = error instanceof Error ? error.stack : '';
@@ -2475,6 +2609,9 @@
                     }
                     
                     await initializeTongoService();
+                    
+                    // Initialize badge service
+                    await initBadgeService();
                     
                     // Try to recover pending swaps (but don't fail if Atomiq is down)
                     try {
@@ -2995,6 +3132,193 @@
                 }
             });
         }
+
+        // Badge Service Integration
+        async function initBadgeService() {
+            if (!walletAccount) return;
+            
+            try {
+                const provider = createProvider(currentNetwork);
+                badgeService = new BadgeService(provider, currentNetwork);
+                
+                // Show badge section
+                const section = document.getElementById('badge-section');
+                if (section) section.style.display = 'block';
+                
+                // Load current badge
+                await refreshBadgeStatus();
+            } catch (error) {
+                console.warn('[BADGE] Could not initialize badge service:', error);
+            }
+        }
+
+        async function refreshBadgeStatus() {
+            if (!badgeService || !walletAccount) return;
+            
+            try {
+                const tier = await badgeService.getUserBadgeTier(walletAccount.address);
+                const tierName = badgeService.getTierName(tier);
+                
+                const iconEl = document.getElementById('badge-icon');
+                const nameEl = document.getElementById('badge-name');
+                
+                if (iconEl && nameEl) {
+                    if (tier === BadgeTier.NONE) {
+                        iconEl.textContent = '⚪';
+                        nameEl.textContent = 'No Badge Yet';
+                    } else if (tier === BadgeTier.BRONZE) {
+                        iconEl.textContent = '🥉';
+                        nameEl.textContent = 'Bronze Donor';
+                    } else if (tier === BadgeTier.SILVER) {
+                        iconEl.textContent = '🥈';
+                        nameEl.textContent = 'Silver Donor';
+                    } else if (tier === BadgeTier.GOLD) {
+                        iconEl.textContent = '🥇';
+                        nameEl.textContent = 'Gold Donor';
+                    }
+                }
+                
+                addLog(`[BADGE] Current badge: ${tierName}`, 'info');
+            } catch (e) {
+                console.warn('[BADGE] Could not fetch badge status:', e);
+            }
+        }
+
+        window.generateBadgeProof = async function() {
+            if (!badgeService) {
+                addLog('[BADGE] Badge service not initialized', 'error');
+                return;
+            }
+            
+            const tierSelect = document.getElementById('badge-tier-select');
+            const amountInput = document.getElementById('badge-donation-amount');
+            const secretInput = document.getElementById('badge-secret');
+            const statusDiv = document.getElementById('badge-proof-status');
+            const claimBtn = document.getElementById('claim-badge-btn');
+            
+            if (!tierSelect || !amountInput || !secretInput) {
+                addLog('[BADGE] Form elements not found', 'error');
+                return;
+            }
+            
+            const tier = parseInt(tierSelect.value);
+            const amountDollars = parseFloat(amountInput.value);
+            const secret = secretInput.value;
+            
+            // Validation
+            if (!amountDollars || amountDollars < 10) {
+                addLog('[BADGE] Please enter a valid donation amount ($10+)', 'error');
+                return;
+            }
+            
+            if (!secret || secret.length < 8) {
+                addLog('[BADGE] Please enter a secret key (at least 8 characters)', 'error');
+                return;
+            }
+            
+            // Convert to cents
+            const amountCents = Math.round(amountDollars * 100);
+            
+            // Check eligibility
+            const threshold = badgeService.getTierThreshold(tier);
+            if (amountCents < threshold) {
+                addLog(`[BADGE] Amount $${amountDollars} is below threshold $${threshold / 100} for selected tier`, 'error');
+                return;
+            }
+            
+            // Show status
+            if (statusDiv) {
+                statusDiv.style.display = 'block';
+                statusDiv.innerHTML = '<div class="status-message">🔄 Generating ZK proof... This may take 30-60 seconds</div>';
+            }
+            
+            try {
+                addLog('[BADGE] Generating ZK proof...', 'info');
+                
+                // Hash the secret for privacy (convert to felt252)
+                const secretHash = hash.computePoseidonHashOnElements([secret]);
+                
+                pendingBadgeProof = await badgeService.generateProof({
+                    donationAmountCents: amountCents,
+                    donorSecret: secretHash,
+                    targetTier: tier
+                });
+                
+                if (statusDiv) {
+                    statusDiv.innerHTML = `
+                        <div class="status-message" style="color: #00ff00;">
+                            ✅ Proof generated successfully!<br>
+                            <small>Tier: ${badgeService.getTierName(tier)}</small>
+                        </div>
+                    `;
+                }
+                
+                if (claimBtn) {
+                    claimBtn.style.display = 'block';
+                }
+                
+                addLog('[BADGE] ✅ Proof generated! Ready to claim on-chain.', 'success');
+                
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                
+                if (statusDiv) {
+                    statusDiv.innerHTML = `<div class="status-message" style="color: #ff4444;">❌ ${errorMsg}</div>`;
+                }
+                
+                addLog(`[BADGE] Error: ${errorMsg}`, 'error');
+            }
+        };
+
+        window.claimBadge = async function() {
+            if (!badgeService || !walletAccount || !pendingBadgeProof) {
+                addLog('[BADGE] No proof to claim', 'error');
+                return;
+            }
+            
+            const statusDiv = document.getElementById('badge-proof-status');
+            const claimBtn = document.getElementById('claim-badge-btn');
+            
+            if (statusDiv) {
+                statusDiv.innerHTML = '<div class="status-message">🔄 Claiming badge on-chain...</div>';
+            }
+            
+            try {
+                addLog('[BADGE] Submitting badge claim to Starknet...', 'info');
+                
+                const txHash = await badgeService.claimBadge(walletAccount, pendingBadgeProof);
+                
+                if (statusDiv) {
+                    statusDiv.innerHTML = `
+                        <div class="status-message" style="color: #00ff00;">
+                            ✅ Badge claimed!<br>
+                            <small>TX: ${txHash.slice(0, 20)}...</small>
+                        </div>
+                    `;
+                }
+                
+                if (claimBtn) {
+                    claimBtn.style.display = 'none';
+                }
+                
+                // Refresh badge status
+                await refreshBadgeStatus();
+                
+                // Clear pending proof
+                pendingBadgeProof = null;
+                
+                addLog(`[BADGE] 🏅 Badge claimed! TX: ${txHash}`, 'success');
+                
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                
+                if (statusDiv) {
+                    statusDiv.innerHTML = `<div class="status-message" style="color: #ff4444;">❌ ${errorMsg}</div>`;
+                }
+                
+                addLog(`[BADGE] Claim error: ${errorMsg}`, 'error');
+            }
+        };
     </script>
 </body>
 </html>
