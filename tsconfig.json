@@ -18,6 +18,6 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "deployments/**/*.json"],
   "exclude": ["node_modules", "dist"]
 }
