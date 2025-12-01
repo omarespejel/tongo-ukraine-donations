@@ -1,5 +1,13 @@
 # 🚀 Cloudflare Pages Deployment Guide
 
+## 📇 On-chain Deployment Records
+
+- Canonical addresses are tracked under `deployments/<network>.json`.
+- Latest Sepolia deployment lives in `deployments/sepolia.json` with class hashes, tx hashes, and artifact paths.
+- Update the JSON **every time you declare or deploy** so the frontend/backends can pull the newest addresses.
+
+---
+
 ## ⚠️ First Time Setup
 
 ### Step 1: Login to Cloudflare

@@ -85,3 +85,5 @@ The "NowOwner" error was caused by using Tongo SDK v1.3.0 (released Nov 14) with
 - Safari may have limited wallet extension support
 - Mobile browsers require wallet apps, not extensions
 
+
+
