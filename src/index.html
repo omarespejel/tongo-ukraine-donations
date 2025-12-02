@@ -1406,7 +1406,15 @@
             <div class="card" id="badge-section" style="display: none;">
                 <div class="card__header">
                     <h2>🏅 Donation Badges</h2>
+                    <p class="hint" style="color: #ffaa00; font-size: 0.85em; margin-bottom: 12px;">
+                        ⚠️ Badges are currently on <strong>Sepolia testnet only</strong>. Mainnet support is coming soon.
+                        <br>
+                        <small style="color: rgba(255,255,255,0.8);">
+                            Your Tongo funding and donations follow the network you selected above, but badge generation and verification always run on Sepolia until the mainnet verifier is deployed.
+                        </small>
+                    </p>
                     <p class="card__subtitle">Prove your generosity without revealing amounts</p>
+                    <div id="badge-status-banner" style="display: none; margin-top: 10px; padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: rgba(255,255,255,0.9); font-size: 0.85em;"></div>
                 </div>
                 <div style="background: rgba(0,255,0,0.1); border: 1px solid #00ff00; padding: 10px; margin-bottom: 20px; border-radius: 4px; color: #c8ffce;">
                     ✅ Verifier Contract: <code>0x022b20fef3764d09293c5b377bc399ae7490e60665797ec6654d478d74212669</code> (Sepolia)<br>
@@ -1543,17 +1551,24 @@
             formatUsdcAmount,
             formatStrkAmount
         } from './avnu-service.ts';
-        import { BadgeService, BadgeTier, DEMO_PROOF } from './badge-service.ts';
-        import { hash } from 'starknet';
+        import { BadgeService, BadgeTier } from './badge-service.ts';
+        import { hash, RpcProvider } from 'starknet';
         
         let service = null;
         let isInitialized = false;
         let walletAccount = null;
         let tongoPrivateKey = null;
         let badgeService = null;
+        // Debug helpers for console inspection
+        window._debug = {
+            get badgeService() { return badgeService; },
+            get walletAccount() { return walletAccount; },
+            get pendingBadgeProof() { return pendingBadgeProof; },
+            get currentNetwork() { return currentNetwork; }
+        };
         /** @type {import('./badge-service.ts').BadgeProof | null} */
         let pendingBadgeProof = null;
-        const DEMO_MODE = true; // Toggle for hackathon demo
+        const LIGHTNING_ENABLED = false; // Temporary flag to hide Lightning donations
 
         // Get current network from select or localStorage
         function getCurrentNetwork() {
@@ -1660,6 +1675,16 @@
             status.textContent = message;
             status.className = `status ${type}`;
             status.classList.remove('hidden');
+        }
+
+        function hideLightningFeature(reason = 'Lightning donations are temporarily disabled while we fix the integration.') {
+            const section = document.getElementById('lightning-section');
+            if (section) {
+                section.remove();
+            }
+            if (reason) {
+                addLog(`[LIGHTNING] ${reason}`, 'warn');
+            }
         }
 
         // Generate and show Tongo key backup modal
@@ -1797,22 +1822,28 @@
                 document.getElementById('connectWalletBtn').classList.add('hidden');
                 document.getElementById('disconnectWalletBtn').classList.remove('hidden');
                 
-                // Initialize Lightning (but don't fail if Atomiq is down)
-                try {
-                    await showLightningSection();
-                } catch (lightningError) {
-                    console.warn('[CONNECT] Lightning initialization failed (non-critical):', lightningError);
-                    addLog('[LIGHTNING] ⚠️ Lightning service unavailable - you can still use USDC donations', 'warn');
+                // Initialize Lightning (disabled in this build)
+                if (LIGHTNING_ENABLED) {
+                    try {
+                        await showLightningSection();
+                    } catch (lightningError) {
+                        console.warn('[CONNECT] Lightning initialization failed (non-critical):', lightningError);
+                        addLog('[LIGHTNING] ⚠️ Lightning service unavailable - you can still use USDC donations', 'warn');
+                    }
+                } else {
+                    addLog('[LIGHTNING] Lightning donations are temporarily disabled in this build.', 'info');
                 }
                 
                 // Initialize Tongo service
                 await initializeTongoService();
                 
-                // Try to recover pending swaps (but don't fail if Atomiq is down)
-                try {
-                    await recoverPendingSwaps();
-                } catch (recoveryError) {
-                    console.warn('[CONNECT] Swap recovery skipped:', recoveryError);
+                // Try to recover pending swaps (disabled when Lightning is off)
+                if (LIGHTNING_ENABLED) {
+                    try {
+                        await recoverPendingSwaps();
+                    } catch (recoveryError) {
+                        console.warn('[CONNECT] Swap recovery skipped:', recoveryError);
+                    }
                 }
                 
             } catch (error) {
@@ -1906,6 +1937,10 @@
         
         // Show Lightning section when wallet is connected
         async function showLightningSection() {
+            if (!LIGHTNING_ENABLED) {
+                hideLightningFeature();
+                return;
+            }
             const section = document.getElementById('lightning-section');
             if (!section) return;
             
@@ -2000,6 +2035,9 @@
         
         // Recover pending swaps on page load
         async function recoverPendingSwaps() {
+            if (!LIGHTNING_ENABLED) {
+                return;
+            }
             if (!isAtomiqAvailable()) {
                 console.log('[LIGHTNING] Skipping swap recovery - Atomiq not available');
                 return;
@@ -2037,31 +2075,38 @@
         }
         
         // Quick amount buttons
-        document.querySelectorAll('.quick-btn-lightning[data-usd]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const usd = parseInt((e.target).dataset.usd || '0');
-                const input = document.getElementById('lightning-amount-usd');
-                if (input) {
-                    input.value = usd.toString();
-                    updateSatsConversion(usd);
-                    
-                    // Highlight selected
-                    document.querySelectorAll('.quick-btn-lightning').forEach(b => b.classList.remove('active'));
-                    (e.target).classList.add('active');
-                }
-            });
-        });
-        
-        // Update sats conversion on input change
-        const lightningAmountInput = document.getElementById('lightning-amount-usd');
-        if (lightningAmountInput) {
-            lightningAmountInput.addEventListener('input', (e) => {
-                const usd = parseFloat((e.target).value) || 0;
-                updateSatsConversion(usd);
+        if (LIGHTNING_ENABLED) {
+            document.querySelectorAll('.quick-btn-lightning[data-usd]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const usd = parseInt((e.target).dataset.usd || '0');
+                    const input = document.getElementById('lightning-amount-usd');
+                    if (input) {
+                        input.value = usd.toString();
+                        updateSatsConversion(usd);
+                        
+                        // Highlight selected
+                        document.querySelectorAll('.quick-btn-lightning').forEach(b => b.classList.remove('active'));
+                        (e.target).classList.add('active');
+                    }
+                });
             });
         }
         
+        // Update sats conversion on input change
+        if (LIGHTNING_ENABLED) {
+            const lightningAmountInput = document.getElementById('lightning-amount-usd');
+            if (lightningAmountInput) {
+                lightningAmountInput.addEventListener('input', (e) => {
+                    const usd = parseFloat((e.target).value) || 0;
+                    updateSatsConversion(usd);
+                });
+            }
+        }
+        
         function updateSatsConversion(usd) {
+            if (!LIGHTNING_ENABLED) {
+                return;
+            }
             const sats = usdToSats(usd, btcPriceUSD);
             const conversionEl = document.getElementById('sats-conversion');
             if (conversionEl) {
@@ -2071,7 +2116,7 @@
         
         // Generate Lightning Invoice
         const generateInvoiceBtn = document.getElementById('generate-invoice-btn');
-        if (generateInvoiceBtn) {
+        if (LIGHTNING_ENABLED && generateInvoiceBtn) {
             generateInvoiceBtn.addEventListener('click', async () => {
                 // Check if Atomiq is available first
                 if (!isAtomiqAvailable()) {
@@ -2436,7 +2481,7 @@
         
         // Copy invoice to clipboard
         const copyInvoiceBtn = document.getElementById('copy-invoice-btn');
-        if (copyInvoiceBtn) {
+        if (LIGHTNING_ENABLED && copyInvoiceBtn) {
             copyInvoiceBtn.addEventListener('click', () => {
                 const invoiceText = document.getElementById('invoice-text');
                 if (invoiceText) {
@@ -2607,11 +2652,13 @@
                         `${walletAccount.address.slice(0, 10)}...${walletAccount.address.slice(-8)}`;
                     document.getElementById('connectWalletBtn').classList.add('hidden');
                     document.getElementById('disconnectWalletBtn').classList.remove('hidden');
-                    // Initialize Lightning (but don't fail if Atomiq is down)
-                    try {
-                        await showLightningSection();
-                    } catch (lightningError) {
-                        console.warn('[CONNECT] Lightning initialization failed (non-critical):', lightningError);
+                    // Initialize Lightning when enabled
+                    if (LIGHTNING_ENABLED) {
+                        try {
+                            await showLightningSection();
+                        } catch (lightningError) {
+                            console.warn('[CONNECT] Lightning initialization failed (non-critical):', lightningError);
+                        }
                     }
                     
                     await initializeTongoService();
@@ -2619,11 +2666,13 @@
                     // Initialize badge service
                     await initBadgeService();
                     
-                    // Try to recover pending swaps (but don't fail if Atomiq is down)
-                    try {
-                        await recoverPendingSwaps();
-                    } catch (recoveryError) {
-                        console.warn('[CONNECT] Swap recovery skipped:', recoveryError);
+                    // Try to recover pending swaps (only when Lightning is enabled)
+                    if (LIGHTNING_ENABLED) {
+                        try {
+                            await recoverPendingSwaps();
+                        } catch (recoveryError) {
+                            console.warn('[CONNECT] Swap recovery skipped:', recoveryError);
+                        }
                     }
                 } else {
                     addLog('Connect your wallet to start', 'info');
@@ -2672,6 +2721,10 @@
                 console.log('[APP] Page loaded, initializing...');
                 addLog('Tongo Donation Demo loaded', 'info');
                 addLog('Pre-loading wallet module for faster connection...', 'info');
+                
+                if (!LIGHTNING_ENABLED) {
+                    hideLightningFeature('Lightning donations are temporarily disabled while we stabilize the Lightning integration.');
+                }
                 
                 // Ensure button listeners are attached
                 attachButtonListeners();
@@ -3140,21 +3193,35 @@
         }
 
         // Badge Service Integration
+        function setBadgeStatus(message, type = 'info') {
+            const banner = document.getElementById('badge-status-banner');
+            if (!banner) return;
+            banner.style.display = 'block';
+            banner.textContent = message;
+            const colors = {
+                info: 'rgba(0, 102, 204, 0.3)',
+                success: 'rgba(0, 153, 51, 0.3)',
+                warn: 'rgba(204, 153, 0, 0.3)',
+                error: 'rgba(204, 51, 51, 0.3)'
+            };
+            banner.style.background = colors[type] || colors.info;
+        }
+
         async function initBadgeService() {
             if (!walletAccount) return;
+            const section = document.getElementById('badge-section');
+            if (section) section.style.display = 'block';
+            setBadgeStatus('Initializing Sepolia badge verifier...', 'info');
             
             try {
-                const provider = createProvider(currentNetwork);
-                badgeService = new BadgeService(provider, currentNetwork);
-                
-                // Show badge section
-                const section = document.getElementById('badge-section');
-                if (section) section.style.display = 'block';
-                
-                // Load current badge
+                const sepoliaProvider = createProvider('sepolia');
+                badgeService = new BadgeService(sepoliaProvider, 'sepolia');
+                setBadgeStatus('Connected to Sepolia badge verifier ✅', 'success');
                 await refreshBadgeStatus();
             } catch (error) {
+                badgeService = null;
                 console.warn('[BADGE] Could not initialize badge service:', error);
+                setBadgeStatus('Badge verifier unavailable. Please stay on Sepolia or try again later.', 'error');
             }
         }
 
@@ -3238,46 +3305,13 @@
                 statusDiv.innerHTML = '<div class="status-message">🔄 Generating ZK proof... This may take 30-60 seconds</div>';
             }
             
-            if (DEMO_MODE) {
-                if (statusDiv) {
-                    statusDiv.innerHTML = `
-                        <div class="status-message" style="color: #ffaa00">
-                            ⚡ DEMO MODE: Using pre-generated proof<br>
-                            <small>Real proofs require Noir/Barretenberg backend</small>
-                        </div>
-                    `;
-                }
-
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-
-                pendingBadgeProof = DEMO_PROOF.badgeProof;
-
-                if (statusDiv) {
-                    statusDiv.innerHTML = `
-                        <div class="status-message" style="color: #00ff00">
-                            ✅ Proof ready (demo)<br>
-                            <small>${DEMO_PROOF.note}</small>
-                        </div>
-                    `;
-                }
-
-                if (claimBtn) {
-                    claimBtn.style.display = 'block';
-                }
-
-                addLog('[BADGE] Demo proof ready. Use CLI backend for real proofs.', 'info');
-                return;
-            }
-            
             try {
                 addLog('[BADGE] Generating ZK proof...', 'info');
                 
-                // Hash the secret for privacy (convert to felt252)
-                const secretHash = hash.computePoseidonHashOnElements([secret]);
-                
                 pendingBadgeProof = await badgeService.generateProof({
                     donationAmountCents: amountCents,
-                    donorSecret: secretHash,
+                    // Send raw secret; backend computes BN254 Poseidon commitment
+                    donorSecret: secret,
                     targetTier: tier
                 });
                 
@@ -3318,20 +3352,6 @@
             
             if (statusDiv) {
                 statusDiv.innerHTML = '<div class="status-message">🔄 Claiming badge on-chain...</div>';
-            }
-            
-            if (DEMO_MODE) {
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-                if (statusDiv) {
-                    statusDiv.innerHTML = `
-                        <div class="status-message" style="color: #ffaa00;">
-                            ⚠️ Demo mode: on-chain claim disabled<br>
-                            <small>Use CLI + sncast to submit the proof on Sepolia.</small>
-                        </div>
-                    `;
-                }
-                addLog('[BADGE] Demo mode claim skipped. Proof ready for sncast.', 'warn');
-                return;
             }
             
             try {

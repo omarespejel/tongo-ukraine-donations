@@ -48,6 +48,8 @@ donation_badge_verifier/target/
 # Generated calldata files
 zk-badges/calldata.json
 zk-badges/calldata.txt
+zk-badges/calldata_hex.txt
+tongo-donation-context-*.txt
 
 # Vendor dependencies (if using submodules or vendoring)
 vendor/

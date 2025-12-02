@@ -1,9 +1,8 @@
 // src/badge-service.ts
 // Donation Badge Service - handles proof generation + Starknet interaction
 
-import { Account, Contract, RpcProvider, hash } from 'starknet';
+import { Account, Contract, RpcProvider } from 'starknet';
 import { getContractAddress } from './deployments';
-import { MOCK_PROOF_RESPONSE } from '../api/mock-proof-response';
 
 export enum BadgeTier {
   NONE = 0,
@@ -75,27 +74,8 @@ export interface BadgeProof {
   badgeTier: number;
 }
 
-const DEMO_CALldata_SNIPPET = MOCK_PROOF_RESPONSE.calldata.join(' ').slice(0, 100);
-
-const DEMO_BADGE_PROOF: BadgeProof = {
-  fullProofWithHints: [...MOCK_PROOF_RESPONSE.calldata],
-  threshold: MOCK_PROOF_RESPONSE.threshold.toString(),
-  donationCommitment: BigInt(MOCK_PROOF_RESPONSE.commitment).toString(),
-  badgeTier: MOCK_PROOF_RESPONSE.tier,
-};
-
-export const DEMO_PROOF = {
-  calldata: `${DEMO_CALldata_SNIPPET}…`,
-  threshold: MOCK_PROOF_RESPONSE.threshold,
-  commitment_low: MOCK_PROOF_RESPONSE.commitment,
-  commitment_high: MOCK_PROOF_RESPONSE.commitment_high,
-  tier: MOCK_PROOF_RESPONSE.tier,
-  note: 'Pre-generated proof for demo - real proofs require backend toolchain',
-  badgeProof: DEMO_BADGE_PROOF,
-};
-
 export interface ProofGenerationStatus {
-  stage: 'idle' | 'computing_commitment' | 'generating_proof' | 'complete' | 'error';
+  stage: 'idle' | 'generating_proof' | 'complete' | 'error';
   message: string;
   progress?: number;
 }
@@ -109,13 +89,14 @@ export class BadgeService {
   constructor(
     provider: RpcProvider,
     network: 'mainnet' | 'sepolia' = 'sepolia',
-    proofBackendUrl = '/api/generate-proof',
+    proofBackendUrl: string = 'https://shiny-computing-machine-vr99pj4vw5hx9qj-3001.app.github.dev/api/generate-proof',
   ) {
     this.provider = provider;
-    this.network = network;
+    // Force Sepolia for badges until mainnet deployment is ready
+    this.network = 'sepolia';
     this.proofBackendUrl = proofBackendUrl;
 
-    const contractAddress = BADGE_CONTRACT_ADDRESS[network];
+    const contractAddress = BADGE_CONTRACT_ADDRESS[this.network];
     if (contractAddress && contractAddress !== '0x0') {
       const StarknetContract = Contract as unknown as new (...args: any[]) => Contract;
       this.contract = new StarknetContract(BADGE_ABI as any, contractAddress, provider);
@@ -160,13 +141,6 @@ export class BadgeService {
     return BadgeTier.NONE;
   }
 
-  computeCommitment(donorSecret: string, donationAmountCents: number): string {
-    const secretHash = hash.computePoseidonHashOnElements(
-      donorSecret.split('').map((c) => BigInt(c.charCodeAt(0))),
-    );
-    return hash.computePoseidonHash(secretHash, donationAmountCents.toString());
-  }
-
   async generateProof(
     input: DonationProofInput,
     onStatusUpdate?: (status: ProofGenerationStatus) => void,
@@ -179,17 +153,6 @@ export class BadgeService {
           `threshold $${(threshold / 100).toFixed(2)} for ${this.getTierName(input.targetTier)}`,
       );
     }
-
-    onStatusUpdate?.({
-      stage: 'computing_commitment',
-      message: 'Computing commitment...',
-      progress: 10,
-    });
-
-    const commitment = this.computeCommitment(
-      input.donorSecret,
-      input.donationAmountCents,
-    );
 
     onStatusUpdate?.({
       stage: 'generating_proof',
@@ -205,7 +168,6 @@ export class BadgeService {
         donor_secret: input.donorSecret,
         threshold,
         badge_tier: input.targetTier,
-        donation_commitment: commitment,
       }),
     });
 
@@ -223,10 +185,17 @@ export class BadgeService {
       progress: 100,
     });
 
+    const donationCommitment =
+      result.donation_commitment ?? result.commitment ?? result.commitment_hex;
+
+    if (!donationCommitment) {
+      throw new Error('Proof generation response missing commitment');
+    }
+
     return {
       fullProofWithHints: result.calldata,
       threshold: threshold.toString(),
-      donationCommitment: commitment,
+      donationCommitment: donationCommitment.toString(),
       badgeTier: input.targetTier,
     };
   }
