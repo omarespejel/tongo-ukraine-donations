@@ -1539,7 +1539,7 @@
             formatUsdcAmount,
             formatStrkAmount
         } from './avnu-service.ts';
-        import { BadgeService, BadgeTier, BadgeProof } from './badge-service.ts';
+        import { BadgeService, BadgeTier } from './badge-service.ts';
         import { hash } from 'starknet';
         
         let service = null;
@@ -1547,6 +1547,7 @@
         let walletAccount = null;
         let tongoPrivateKey = null;
         let badgeService = null;
+        /** @type {import('./badge-service.ts').BadgeProof | null} */
         let pendingBadgeProof = null;
 
         // Get current network from select or localStorage
