@@ -1,254 +1,272 @@
-# Tongo Private Donation Demo
+# Verified Donor Badge Demo (Starknet Privacy Toolkit)
 
-A web-based frontend for private donations on Starknet using the Tongo Cash protocol. This demo enables users to connect their wallets, fund encrypted Tongo accounts, and send private donations where amounts are hidden via zero-knowledge proofs.
+This repository hosts an end-to-end reference implementation of a “Verified Donor Badge” workflow built entirely on Starknet privacy tooling. It demonstrates how Noir circuits, Barretenberg proofs, Garaga-generated Cairo verifiers, and a Starknet badge contract can be composed to prove that a donor contributed ≥ a threshold without revealing the exact amount.
 
-## Features
+> The goal of this README is to serve technical builders who want to reproduce or extend the flow—not to advertise a hackathon submission.
 
-- Wallet integration with Braavos and Argent X
-- Network support for Mainnet (USDC) and Sepolia testnet (STRK)
-- Fund operations: Convert USDC/STRK to encrypted Tongo balance
-- Private donations: Send encrypted amounts (amounts hidden via ZK proofs)
-- Withdraw operations: Convert encrypted balance back to tokens
-- Rollover: Move pending balance to current balance
-- Real-time balance display and transaction logging
-- Tongo private key management with backup functionality
+---
 
-## Technology Stack
+## System Overview
 
-- Tongo SDK v1.3.0 - Zero-knowledge proof generation and encryption
-- Starknet.js v8.9.1 - Starknet blockchain interactions
-- get-starknet v3.3.3 - Wallet connection SDK
-- Vite - Build tool and development server
-- Bun - Package manager and runtime
-- TypeScript - Type-safe development
+| Layer | Component | Purpose |
+| ----- | --------- | ------- |
+| ZK Circuit | `zk-badges/donation_badge` | Noir circuit that hashes `(donation_amount, donor_secret)` with Poseidon and enforces `donation_amount >= threshold`. |
+| Proving | Barretenberg `0.67.0` | Generates Ultra Keccak Honk proofs + VK compatible with Garaga 0.15.5. |
+| Verifier | `donation_badge_verifier` | Garaga-generated verifier plus custom `DonationBadge` contract that mints tiered badges after proof validation. |
+| Backend | `api/generate-proof.ts` | Bun API that orchestrates witness creation, proving, and calldata generation. |
+| Frontend | `src/index.html` + `src/badge-service.ts` | Simple UI + TypeScript service for generating commitments, requesting proofs, and claiming the badge. |
 
-## Prerequisites
+The verifier and badge contracts are currently deployed on **Starknet Sepolia**; addresses are tracked under `deployments/sepolia.json` and surfaced to the UI through `src/deployments.ts`.
 
-- Bun runtime ([install bun](https://bun.sh))
-- Braavos or Argent X wallet extension installed in your browser
-- USDC (mainnet) or STRK (testnet) tokens in your wallet
-- Alchemy API key for RPC access ([get one here](https://www.alchemy.com))
+---
 
-## Installation
+## Status Checklist
 
-1. Clone the repository:
+- ✅ Noir circuit compiles (Noir `1.0.0-beta.1`)
+- ✅ Verifier contract declared + deployed on Sepolia (Garaga `0.15.5`, Scarb `2.9.2`)
+- ✅ Proof verified on-chain via `sncast call`
+- ✅ Repository is structured + committed
+- ✅ README rewritten for engineers
+- ⬜ Demo video (out of scope for repo)
+- ⬜ Devpost submission (handled externally)
+
+---
+
+## Tech Stack
+
+- **Noir** `1.0.0-beta.1` + Poseidon dependency
+- **Barretenberg** `0.67.0` (Ultra Keccak Honk backend)
+- **Garaga** `0.15.5` for Cairo verifier generation
+- **Scarb** `2.9.2` (Cairo build)
+- **Starknet Foundry** (`sncast`, `snforge`) for declares/deploys
+- **Starkli** for manual invocations
+- **Bun + TypeScript** for frontend/API
+
+Version pinning is critical; mismatched bb/Garaga/Noir combinations will produce incompatible proofs. See `BADGE_SETUP.md` for the downgrade narrative.
+
+---
+
+## Repository Layout (Key Files Only)
+
+```
+zk-badges/
+  └── donation_badge/
+      ├── src/main.nr          # Noir circuit
+      ├── Nargo.toml           # Noir manifest (Poseidon dep)
+      ├── compute_commitment.js# Poseidon commitment helper
+      └── generate-proof.sh    # One-touch proof pipeline
+
+donation_badge_verifier/
+  ├── Scarb.toml               # Garaga project manifest
+  ├── src/honk_verifier*.cairo # Generated verifier modules
+  ├── src/badge_contract.cairo # Custom contract that mints badges
+  └── snfoundry.toml           # Deployment profile (Sepolia)
+
+deployments/
+  └── sepolia.json             # Contract registry consumed by frontend
+
+src/
+  ├── index.html               # Demo UI with badge section
+  ├── badge-service.ts         # Client helper for proofs + badge contract
+  └── deployments.ts           # Loader for deployment JSON files
+
+api/generate-proof.ts          # Bun API endpoint to invoke Noir/bb/Garaga
+BADGE_IMPLEMENTATION.md        # Requirements + architecture notes
+BADGE_SETUP.md                 # Environment + troubleshooting log
+DEPLOY.md                      # Pages deploy + deployment registry policy
+```
+
+---
+
+## Getting Started
+
+1. **Clone + install JS deps**
+   ```bash
+   git clone https://github.com/omarespejel/tongo-ukraine-donations.git
+   cd tongo-donation-demo
+   bun install
+   ```
+
+2. **Install ZK toolchain (versions matter!)**
+   ```bash
+   # Noir & Barretenberg
+   curl -L noirup.dev | bash
+   noirup --version 1.0.0-beta.1
+   curl -L bbup.dev | bash
+   bbup --version 0.67.0
+
+   # Garaga + Cairo tooling (python3.10 + pip)
+   pip install garaga==0.15.5
+   brew install scarb@2.9.2  # or download release tarball
+   ```
+
+3. **Configure Starknet credentials**
+   - `donation_badge_verifier/.secrets` contains the Sepolia RPC + account keys used in this repo.
+   - Copy values into your environment or create fresh OpenZeppelin accounts via `sncast account create …`.
+   - For Starkli-based flows, create a keystore and account config (see instructions in `BADGE_SETUP.md`).
+
+---
+
+## Generating Proofs Locally
+
+> macOS bb binaries are flaky. For deterministic results, use GitHub Codespaces or any Linux VM with ≥8 GB RAM as documented in `BADGE_SETUP.md`.
 
 ```bash
-git clone https://github.com/omarespejel/tongo-ukraine-donations.git
-cd tongo-ukraine-donations
+cd zk-badges
+./generate-proof.sh \
+  --amount 1000 \
+  --threshold 1000 \
+  --donor-secret hunter2 \
+  --tier 1
 ```
 
-2. Install dependencies:
+The script performs:
+
+1. Poseidon commitment via `compute_commitment.js`
+2. `nargo compile` + `nargo execute witness`
+3. `bb prove` + `bb write_vk`
+4. `garaga calldata --system ultra_keccak_honk --format starkli`
+
+Outputs land in `zk-badges/donation_badge/target` plus `zk-badges/calldata.txt`.
+
+---
+
+## Contract Deployment + Verification
+
+1. **Build verifier project**
+   ```bash
+   cd donation_badge_verifier
+   scarb build
+   ```
+
+2. **Declare + deploy via sncast**
+   ```bash
+   sncast --profile sepolia declare \
+     --contract target/release/donation_badge_verifier_UltraKeccakHonkVerifier.contract_class.json
+
+   sncast --profile sepolia deploy \
+     --class-hash <verifier_class_hash>
+   ```
+
+3. **Deploy badge contract (takes verifier address as constructor arg).**
+
+4. **Record everything in `deployments/sepolia.json`.**
+
+5. **Test verification**
+   ```bash
+   garaga calldata --system ultra_keccak_honk \
+     --vk zk-badges/donation_badge/target/vk \
+     --proof zk-badges/donation_badge/target/proof \
+     --format starkli > zk-badges/calldata.txt
+
+   sncast --profile sepolia call \
+     --contract-address <verifier_addr> \
+     --function verify_ultra_keccak_honk_proof \
+     --calldata $(cat zk-badges/calldata.txt)
+   ```
+   When the call returns `0x1`, the proof is valid on-chain.
+
+---
+
+## Claiming a Badge
+
+The `DonationBadge::claim_badge` entrypoint expects:
+
+1. `full_proof_with_hints: Span<felt252>` – the Garaga calldata array.
+2. `threshold: u256`
+3. `donation_commitment: u256`
+4. `badge_tier: u8`
+
+Example invocation (once Sepolia account has STRK for fees):
 
 ```bash
-bun install
+cd donation_badge_verifier
+PROOF_CALLDATA=$(cat ../zk-badges/calldata.txt)
+
+sncast --profile sepolia invoke \
+  --contract-address 0x077ca6f2ee4624e51ed6ea6d5ca292889ca7437a0c887bf0d63f055f42ad7010 \
+  --function claim_badge \
+  --calldata $PROOF_CALLDATA \
+             1000 0 \
+             0x4e18cb16fc23b735e3a2022c1e422ef4 0x1947661d0c48f766f31005bb473a16ad \
+             1
 ```
 
-3. Configure RPC URLs (optional, for CLI demo):
+After the transaction is accepted, `sncast call --function get_badge_tier` should return `1` for the caller.
 
-Copy `.env.example` to `.env` and add your Alchemy API keys:
+---
+
+## Frontend + API
+
+### API (`api/generate-proof.ts`)
+Runs under Bun; it shells out to Noir/bb/Garaga and streams the calldata back to the client. Ensure the host machine has the toolchain installed and reachable in `$PATH`.
 
 ```bash
-cp .env.example .env
+bun run api
 ```
 
-Edit `.env` with your Alchemy RPC URLs:
-- `STARKNET_MAINNET_RPC_URL`: Your Alchemy mainnet RPC URL
-- `STARKNET_SEPOLIA_RPC_URL`: Your Alchemy Sepolia RPC URL
+POST payload:
+```json
+{
+  "donation_amount": 1500,
+  "threshold": 1000,
+  "donor_secret": "hunter2",
+  "badge_tier": 2
+}
+```
+Response contains `{ "calldata": [ "...felt array..." ] }`.
 
-Note: For browser usage, RPC URLs are configured in `src/wallet-config.ts`. The `.env` file is only needed for the CLI demo (`bun run demo`).
-
-## Usage
-
-### Web Frontend
-
-Start the development server:
-
+### Frontend (`src/index.html`)
+Served via Vite:
 ```bash
-bun run dev:web
+bun run dev
 ```
+The badge section displays eligibility, lets a donor trigger proof generation (via the API), and then submits the proof to Starknet using `starknet.js`. Contract addresses are fetched from `src/deployments.ts`, which reads all JSON files under `deployments/`.
 
-Open your browser to `http://localhost:5173` (or the port shown in terminal).
+---
 
-1. Click "Connect Wallet" and select Braavos or Argent X
-2. Approve the wallet connection
-3. Your Tongo private key will be auto-generated and stored in browser localStorage
-4. Select your network (Mainnet for USDC or Sepolia for STRK)
-5. Fund your account, send donations, or withdraw as needed
+## Deployment Records
 
-### CLI Demo
+- All contract declarations and deployments must be captured in `deployments/<network>.json`.
+- Each entry records class hashes, addresses, tx hashes, and artifact locations.
+- `DEPLOY.md` documents the policy so that frontend/backend consumers share consistent metadata.
 
-For a command-line demonstration:
+This approach keeps the repo network-agnostic—adding a mainnet deployment is just another JSON file.
 
-```bash
-bun run demo
-```
+---
 
-This requires `.env` configuration with `STARKNET_ACCOUNT_ADDRESS` and `STARKNET_PRIVATE_KEY`.
+## Testing Matrix
 
-## Project Structure
+| Component | Command |
+| --------- | ------- |
+| Noir circuit unit test | `cd zk-badges/donation_badge && nargo test` |
+| Cairo verifier build   | `cd donation_badge_verifier && scarb build` |
+| Badge contract tests   | `snforge test` (tests WIP; the contract currently relies on live verifier interaction) |
+| Frontend type-check    | `bun run type-check` |
+| End-to-end proof       | `./zk-badges/generate-proof.sh` followed by `sncast call` as shown above |
 
-```
-tongo-donation-demo/
-├── src/
-│   ├── index.html          # Web frontend
-│   ├── tongo-service.ts    # Core Tongo operations wrapper
-│   ├── wallet-config.ts    # Wallet connection and network config
-│   ├── tongo-key-manager.ts # Tongo private key management
-│   ├── config.ts           # Configuration and provider setup
-│   ├── types.ts            # TypeScript type definitions
-│   └── demo.ts             # CLI demo script
-├── .env.example            # Environment variable template
-├── .gitignore             # Git ignore rules
-├── package.json           # Dependencies and scripts
-├── tsconfig.json          # TypeScript configuration
-├── vite.config.ts         # Vite build configuration
-└── README.md              # This file
-```
+---
 
-## Configuration
+## Security & Privacy Notes
 
-### Deployed Contracts
+- Proof commitments are Poseidon hashes over `(amount, donor_secret)`; the badge contract stores only the hashed commitment.
+- `DonationBadge` prevents commitment reuse, enforces tier monotonicity, and exposes on-chain badge counts for analytics.
+- All calldata arrays are validated for public input ordering before upgrading a badge.
+- Use fresh STRK-funded Sepolia accounts for experiments; never store production keys in this repository (the `.secrets` file is for demo purposes only).
 
-#### Mainnet
-- Tongo Contract: `0x72098b84989a45cc00697431dfba300f1f5d144ae916e98287418af4e548d96` (Nov 14, 2024 - compatible with SDK v1.3.0)
-- USDC Token: `0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8`
-- RPC: Configured in `src/wallet-config.ts` (uses Alchemy)
+---
 
-#### Sepolia Testnet
-- Tongo Contract: `0x00b4cca30f0f641e01140c1c388f55641f1c3fe5515484e622b6cb91d8cee585`
-- STRK Token: `0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d`
-- RPC: Configured in `src/wallet-config.ts` (uses Alchemy)
+## Roadmap Ideas
 
-## How Tongo Works
+- Add recursive proofs for multi-donation attestations.
+- Build a backend service that queues proof jobs (to avoid running `bb` client-side).
+- Expose REST/GraphQL APIs that wallets can consume for badge status.
+- Port the verifier + badge combo to Starknet mainnet when proof generation is production-ready.
 
-### Key Concepts
-
-**ElGamal Encryption on Stark Curve**
-- Each user has a keypair: `(x, y = g^x)` where `g` is the Stark curve generator
-- Public key `y` serves as account identifier
-- Balances stored as ElGamal ciphertexts: `Enc[y](b, r) = (g^b * y^r, g^r)`
-- Additively homomorphic: balance operations work without decryption
-
-**Two-Balance Model**
-- Current Balance: Amount user can spend (requires ZK proof to modify)
-- Pending Balance: Amount received through transfers (user must "rollover" to use)
-
-**Core Operations**
-
-| Operation | Purpose | Visibility | Constraint |
-|-----------|---------|------------|-----------|
-| Fund | Convert ERC20 → Encrypted balance | Amount PUBLIC | Owner only |
-| Transfer | Send encrypted amount | Amount HIDDEN | Ownership + sufficient balance |
-| Rollover | Move pending → current | Internal | Owner only |
-| Withdraw | Convert encrypted → ERC20 | Amount PUBLIC | Ownership + sufficient balance |
-
-**Security Measures**
-- No proof reuse: Each proof includes `chain_id`, `contract_address`, `nonce`
-- TX sender whitelist: Proof valid only if executed by designated Starknet account
-- Balance integrity: All balance modifications validated with ZK proofs
-
-## Tongo Private Key
-
-The Tongo private key is automatically generated when you first connect your wallet. This key is:
-
-- Different from your Starknet private key (used only for Tongo account encryption)
-- Randomly generated (32 bytes) if not provided
-- Critical to save - if you lose it, you lose access to your Tongo balance
-
-The key is stored in browser `localStorage` for web usage, or can be set via `TONGO_PRIVATE_KEY` environment variable for CLI usage.
-
-### Manual Generation (Optional)
-
-If you want to generate it manually:
-
-```bash
-node -e "console.log('0x' + require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Then add it to your `.env` file as `TONGO_PRIVATE_KEY=0x...`
-
-## Development
-
-### Build
-
-TypeScript compilation:
-
-```bash
-bun run build
-```
-
-Web build (Vite):
-
-```bash
-bun run build:web
-```
-
-### Type Checking
-
-```bash
-bun run type-check
-```
-
-### Preview Production Build
-
-```bash
-bun run preview
-```
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Module not found | Run `bun install` |
-| Private key error | Check `.env` file values or let it auto-generate |
-| RPC connection failed | Verify `STARKNET_RPC_URL` or check `wallet-config.ts` |
-| Insufficient balance | Fund account first |
-| TX fails with nonce error | SDK handles nonces automatically |
-| Browser CORS errors | Use dev server, not `file://` |
-| Lost Tongo private key | Cannot recover - generate new account |
-| "NowOwner" error | See address format handling in code - should be auto-patched |
-
-## Known Issues
-
-- Address format sensitivity: Addresses must be consistently formatted (65 vs 66 characters). The code includes automatic padding to handle this.
-- SDK address conversion: The Tongo SDK converts addresses to numbers, which can lose leading zeros. The code automatically patches approve calldata to use correct padded addresses.
-
-## Privacy Model
-
-| Operation | Amount Visibility |
-|-----------|------------------|
-| Fund | PUBLIC (on-chain logs) |
-| Transfer | HIDDEN (ZK encrypted) |
-| Rollover | INTERNAL (only owner sees) |
-| Withdraw | PUBLIC (on-chain logs) |
-
-Key insight: Transfers are fully hidden. Only sender and receiver know amounts (via private viewing keys).
-
-## ZK Proof Implementation
-
-All operations are automatically handled by the SDK:
-
-- Proof generation (no manual work required)
-- Chain ID / contract address / nonce binding
-- Ownership verification
-- Balance integrity checks
-
-The SDK generates zero-knowledge proofs that prove ownership and sufficient balance without revealing the actual balance amount.
-
-## References
-
-- Tongo Documentation: https://docs.tongo.cash/
-- Tongo SDK: https://github.com/fatsolutions/tongo-sdk
-- Starknet.js: https://docs.starknetjs.com/
-- Deployed Contracts: https://docs.tongo.cash/protocol/contracts.html
+---
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) file for details
+MIT License — see [LICENSE](LICENSE).
 
-## Attribution
-
-- Starknet.js - https://github.com/starknet-io/starknet.js
-- Tongo SDK - https://github.com/fatsolutions/tongo-sdk
-- get-starknet - https://github.com/starknet-io/get-starknet
+For questions or contributions, open an issue or PR referencing the section you’re extending (circuit, verifier, contracts, API, or frontend). This repo is intentionally transparent so other Starknet teams can reuse the tooling for privacy-enhancing governance badges, compliance proofs, or donation attestations.
