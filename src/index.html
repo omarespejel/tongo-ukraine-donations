@@ -1408,6 +1408,10 @@
                     <h2>🏅 Donation Badges</h2>
                     <p class="card__subtitle">Prove your generosity without revealing amounts</p>
                 </div>
+                <div style="background: rgba(0,255,0,0.1); border: 1px solid #00ff00; padding: 10px; margin-bottom: 20px; border-radius: 4px; color: #c8ffce;">
+                    ✅ Verifier Contract: <code>0x022b20fef3764d09293c5b377bc399ae7490e60665797ec6654d478d74212669</code> (Sepolia)<br>
+                    <small>On-chain verification tested and working</small>
+                </div>
                 
                 <!-- Current Badge Display -->
                 <div id="current-badge" class="badge-display">
@@ -1539,7 +1543,7 @@
             formatUsdcAmount,
             formatStrkAmount
         } from './avnu-service.ts';
-        import { BadgeService, BadgeTier } from './badge-service.ts';
+        import { BadgeService, BadgeTier, DEMO_PROOF } from './badge-service.ts';
         import { hash } from 'starknet';
         
         let service = null;
@@ -1549,6 +1553,7 @@
         let badgeService = null;
         /** @type {import('./badge-service.ts').BadgeProof | null} */
         let pendingBadgeProof = null;
+        const DEMO_MODE = true; // Toggle for hackathon demo
 
         // Get current network from select or localStorage
         function getCurrentNetwork() {
@@ -3233,6 +3238,37 @@
                 statusDiv.innerHTML = '<div class="status-message">🔄 Generating ZK proof... This may take 30-60 seconds</div>';
             }
             
+            if (DEMO_MODE) {
+                if (statusDiv) {
+                    statusDiv.innerHTML = `
+                        <div class="status-message" style="color: #ffaa00">
+                            ⚡ DEMO MODE: Using pre-generated proof<br>
+                            <small>Real proofs require Noir/Barretenberg backend</small>
+                        </div>
+                    `;
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+
+                pendingBadgeProof = DEMO_PROOF.badgeProof;
+
+                if (statusDiv) {
+                    statusDiv.innerHTML = `
+                        <div class="status-message" style="color: #00ff00">
+                            ✅ Proof ready (demo)<br>
+                            <small>${DEMO_PROOF.note}</small>
+                        </div>
+                    `;
+                }
+
+                if (claimBtn) {
+                    claimBtn.style.display = 'block';
+                }
+
+                addLog('[BADGE] Demo proof ready. Use CLI backend for real proofs.', 'info');
+                return;
+            }
+            
             try {
                 addLog('[BADGE] Generating ZK proof...', 'info');
                 
@@ -3282,6 +3318,20 @@
             
             if (statusDiv) {
                 statusDiv.innerHTML = '<div class="status-message">🔄 Claiming badge on-chain...</div>';
+            }
+            
+            if (DEMO_MODE) {
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+                if (statusDiv) {
+                    statusDiv.innerHTML = `
+                        <div class="status-message" style="color: #ffaa00;">
+                            ⚠️ Demo mode: on-chain claim disabled<br>
+                            <small>Use CLI + sncast to submit the proof on Sepolia.</small>
+                        </div>
+                    `;
+                }
+                addLog('[BADGE] Demo mode claim skipped. Proof ready for sncast.', 'warn');
+                return;
             }
             
             try {

@@ -3,6 +3,7 @@
 
 import { Account, Contract, RpcProvider, hash } from 'starknet';
 import { getContractAddress } from './deployments';
+import { MOCK_PROOF_RESPONSE } from '../api/mock-proof-response';
 
 export enum BadgeTier {
   NONE = 0,
@@ -73,6 +74,25 @@ export interface BadgeProof {
   donationCommitment: string;
   badgeTier: number;
 }
+
+const DEMO_CALldata_SNIPPET = MOCK_PROOF_RESPONSE.calldata.join(' ').slice(0, 100);
+
+const DEMO_BADGE_PROOF: BadgeProof = {
+  fullProofWithHints: [...MOCK_PROOF_RESPONSE.calldata],
+  threshold: MOCK_PROOF_RESPONSE.threshold.toString(),
+  donationCommitment: BigInt(MOCK_PROOF_RESPONSE.commitment).toString(),
+  badgeTier: MOCK_PROOF_RESPONSE.tier,
+};
+
+export const DEMO_PROOF = {
+  calldata: `${DEMO_CALldata_SNIPPET}…`,
+  threshold: MOCK_PROOF_RESPONSE.threshold,
+  commitment_low: MOCK_PROOF_RESPONSE.commitment,
+  commitment_high: MOCK_PROOF_RESPONSE.commitment_high,
+  tier: MOCK_PROOF_RESPONSE.tier,
+  note: 'Pre-generated proof for demo - real proofs require backend toolchain',
+  badgeProof: DEMO_BADGE_PROOF,
+};
 
 export interface ProofGenerationStatus {
   stage: 'idle' | 'computing_commitment' | 'generating_proof' | 'complete' | 'error';
