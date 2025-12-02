@@ -41,7 +41,7 @@ The Verified Donor Badge system has been successfully integrated into the Tongo 
 
 ### Modified Files
 
-1. **`src/index.html`**
+1. **`src/web/index.html`**
    - Added badge UI section with form
    - Added badge CSS styles
    - Integrated badge service JavaScript functions

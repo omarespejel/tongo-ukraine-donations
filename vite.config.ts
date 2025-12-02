@@ -1,12 +1,10 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-import { MOCK_PROOF_RESPONSE } from './api/mock-proof-response';
-
 export default defineConfig({
-  root: './src',
-  publicDir: '../public',
+  root: './src/web',
+  publicDir: '../../public',
   build: {
-    outDir: '../dist',
+    outDir: '../../dist',
     emptyOutDir: true,
     rollupOptions: {
       external: (id) => {
@@ -44,22 +42,6 @@ export default defineConfig({
     // Don't externalize these for SSR (we're not using SSR, but good to have)
     noExternal: ['@fatsolutions/tongo-sdk']
   },
-  plugins: [
-    {
-      name: 'mock-generate-proof-api',
-      configureServer(server) {
-        server.middlewares.use('/api/generate-proof', (req, res, next) => {
-          if (req.method !== 'POST') {
-            res.statusCode = 405;
-            res.end('Method not allowed');
-            return;
-          }
-
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify(MOCK_PROOF_RESPONSE));
-        });
-      },
-    },
-  ],
+  plugins: [],
 });
 

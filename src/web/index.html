@@ -1530,9 +1530,9 @@
     </div>
 
     <script type="module">
-        import { TongoService } from './tongo-service.ts';
-        import { connectWallet as connectWalletSDK, disconnectWallet as disconnectWalletSDK, getConnectedAccount, createProvider, getNetworkConfig, NETWORKS } from './wallet-config.ts';
-        import { getOrCreateTongoKey, hasTongoKey, saveTongoKey } from './tongo-key-manager.ts';
+        import { TongoService } from '../tongo-service.ts';
+        import { connectWallet as connectWalletSDK, disconnectWallet as disconnectWalletSDK, getConnectedAccount, createProvider, getNetworkConfig, NETWORKS } from '../wallet-config.ts';
+        import { getOrCreateTongoKey, hasTongoKey, saveTongoKey } from '../tongo-key-manager.ts';
         import { 
             initializeSwapper,
             createLightningToStarknetSwap,
@@ -1545,13 +1545,13 @@
             fetchBTCPrice,
             isAtomiqAvailable,
             getAtomiqError
-        } from './lightning-service.ts';
+        } from '../lightning-service.ts';
         import { 
             buildStrkToUsdcSwap,
             formatUsdcAmount,
             formatStrkAmount
-        } from './avnu-service.ts';
-        import { BadgeService, BadgeTier } from './badge-service.ts';
+        } from '../avnu-service.ts';
+        import { BadgeService, BadgeTier } from '../badge-service.ts';
         import { hash, RpcProvider } from 'starknet';
         
         let service = null;

@@ -17,7 +17,7 @@ This repository hosts an end-to-end reference implementation of Starknet privacy
 | Proving | Barretenberg `0.67.0` | Generates Ultra Keccak Honk proofs + VK compatible with Garaga 0.15.5. |
 | Verifier | `donation_badge_verifier` | Garaga-generated verifier plus custom `DonationBadge` contract that mints tiered badges after proof validation. |
 | Backend | `api/generate-proof.ts` | Bun API that orchestrates witness creation, proving, and calldata generation. |
-| Frontend | `src/index.html` + `src/badge-service.ts` | Unified UI: funding/withdrawals follow the selected Starknet network, while the badge experience is currently hard-pinned to Sepolia. |
+| Frontend | `src/web/index.html` + `src/badge-service.ts` | Unified UI: funding/withdrawals follow the selected Starknet network, while the badge experience is currently hard-pinned to Sepolia. |
 
 > **Important:** The badge verifier is deployed only on **Starknet Sepolia** today. The UI always connects to Sepolia for badge proofs/claims even when the network toggle is on Mainnet for Tongo operations.
 
@@ -92,6 +92,12 @@ BADGE_IMPLEMENTATION.md        # Requirements + architecture notes
 BADGE_SETUP.md                 # Environment + troubleshooting log
 DEPLOY.md                      # Pages deploy + deployment registry policy
 ```
+
+### Per-directory guides
+
+- [`zk-badges/README.md`](zk-badges/README.md) – Noir circuit + proof generation instructions.
+- [`donation_badge_verifier/README.md`](donation_badge_verifier/README.md) – Garaga verifier + badge contract build/deploy guide.
+- Additional deep dives: [`BADGE_SETUP.md`](BADGE_SETUP.md) (toolchain troubleshooting) and [`BADGE_IMPLEMENTATION.md`](BADGE_IMPLEMENTATION.md) (design notes). Refer to those docs to avoid duplicating version tables elsewhere.
 
 ---
 
@@ -233,7 +239,7 @@ POST payload:
 ```
 Response contains `{ "calldata": [ "...felt array..." ] }`.
 
-### Frontend (`src/index.html`)
+### Frontend (`src/web/index.html`)
 Served via Vite:
 ```bash
 bun run dev
@@ -379,6 +385,9 @@ bun run preview     # Preview production build
 
 ### Additional Notes
 
+- `temp-commitment/` contains throwaway scripts used to benchmark Poseidon commitment logic while designing the badge circuit. Keep them for reference or delete if not needed.
+- `test-mainnet-rpc.ts` is a quick CLI that pings the configured RPC endpoints and contract addresses. Use it when rotating provider URLs or debugging wallet issues.
+- If you fork this repo and do not rely on those helpers, feel free to remove them—just remember why they existed before stripping them out.
 - Address padding quirks: the UI automatically normalizes Starknet addresses.
 - Tongo private key differs from Starknet account key; losing it forfeits encrypted funds.
 - Manual key generation example:
