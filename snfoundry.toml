@@ -1,4 +1,2 @@
 [sncast.sepolia]
-account = "deployer"
-url = "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/cf52O0RwFy1mEB0uoYsel"
-
+url = "https://starknet-sepolia.public.blastapi.io/rpc/v0_7"

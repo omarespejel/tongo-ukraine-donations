@@ -41,8 +41,9 @@ pub mod DonationBadge {
         StoragePointerWriteAccess,
     };
 
-    const COMMITMENT_MASK: u256 =
-        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u256;
+    // FIX: Use felt252 max (2^251 - 1) instead of u256 max
+    const FELT252_MASK_LOW: u128 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+    const FELT252_MASK_HIGH: u128 = 0x07FFFFFFFFFFFFFFFFFFFFFFFFFFFFFF; // 2^123 - 1 for high bits
 
     #[storage]
     struct Storage {
@@ -65,7 +66,7 @@ pub mod DonationBadge {
         #[key]
         recipient: ContractAddress,
         tier: u8,
-        commitment_low: felt252,
+        commitment_hash: felt252,
     }
 
     #[constructor]
@@ -84,11 +85,10 @@ pub mod DonationBadge {
         ) -> bool {
             let caller = get_caller_address();
 
-            let commitment_low: felt252 = (donation_commitment & COMMITMENT_MASK)
-                .try_into()
-                .expect('Commitment conversion failed');
+            // FIX: Just use the low 128 bits as the storage key (unique enough)
+            let commitment_key: felt252 = donation_commitment.low.into();
 
-            assert(!self.used_commitments.read(commitment_low), 'Commitment already used');
+            assert(!self.used_commitments.read(commitment_key), 'Commitment already used');
             assert(badge_tier >= 1_u8 && badge_tier <= 3_u8, 'Invalid badge tier');
 
             let verifier_address = self.verifier_contract.read();
@@ -102,14 +102,13 @@ pub mod DonationBadge {
             let verified_threshold = *public_inputs.at(0);
             let verified_commitment = *public_inputs.at(1);
             let verified_tier_u256 = *public_inputs.at(2);
-            let verified_tier: u8 =
-                verified_tier_u256.try_into().expect('Tier conversion failed');
+            let verified_tier: u8 = verified_tier_u256.low.try_into().expect('Tier conversion failed');
 
             assert(verified_threshold == threshold, 'Threshold mismatch');
             assert(verified_commitment == donation_commitment, 'Commitment mismatch');
             assert(verified_tier == badge_tier, 'Tier mismatch');
 
-            self.used_commitments.write(commitment_low, true);
+            self.used_commitments.write(commitment_key, true);
 
             let current_tier = self.badges.read(caller);
             if badge_tier > current_tier {
@@ -126,7 +125,7 @@ pub mod DonationBadge {
             self.emit(Event::BadgeClaimed(BadgeClaimed {
                 recipient: caller,
                 tier: badge_tier,
-                commitment_low,
+                commitment_hash: commitment_key,
             }));
             true
         }
@@ -140,10 +139,8 @@ pub mod DonationBadge {
         }
 
         fn is_commitment_used(self: @ContractState, commitment: u256) -> bool {
-            let commitment_low: felt252 = (commitment & COMMITMENT_MASK)
-                .try_into()
-                .unwrap_or(0);
-            self.used_commitments.read(commitment_low)
+            let commitment_key: felt252 = commitment.low.into();
+            self.used_commitments.read(commitment_key)
         }
 
         fn get_badge_counts(self: @ContractState) -> (u64, u64, u64) {

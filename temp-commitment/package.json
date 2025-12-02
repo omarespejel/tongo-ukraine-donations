@@ -1,0 +1,7 @@
+{
+  "name": "commitment-calc",
+  "type": "commonjs",
+  "dependencies": {
+    "circomlibjs": "^0.1.7"
+  }
+}
