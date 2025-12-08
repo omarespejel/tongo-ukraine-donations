@@ -103,6 +103,59 @@ DEPLOY.md                      # Pages deploy + deployment registry policy
 
 ## Getting Started
 
+### 🐳 Docker (Recommended - Zero Setup)
+
+**The easiest way to run this project is with Docker.** All dependencies are pre-installed and configured.
+
+**Quick Start (3 steps):**
+
+1. **Install Docker Desktop**: [Download here](https://www.docker.com/products/docker-desktop)
+
+2. **Clone and configure**:
+   ```bash
+   git clone https://github.com/omarespejel/tongo-ukraine-donations.git
+   cd starknet-privacy-toolkit
+   cp .env.example .env
+   ```
+
+3. **Build and run**:
+   ```bash
+   # Windows (PowerShell)
+   .\docker-helper.ps1 build
+   .\docker-helper.ps1 start
+
+   # Linux/Mac
+   chmod +x docker-helper.sh
+   ./docker-helper.sh build
+   ./docker-helper.sh start
+
+   # Or manually
+   docker-compose build
+   docker-compose up -d
+   ```
+
+4. **Access the app**: http://localhost:8080
+
+**What's included in Docker:**
+- ✅ Bun runtime
+- ✅ Noir (nargo) v1.0.0-beta.1
+- ✅ Barretenberg (bb) v0.67.0
+- ✅ Garaga v0.15.5
+- ✅ Scarb v2.9.2
+- ✅ Starknet Foundry
+- ✅ All Node.js dependencies
+- ✅ Pre-compiled circuits and contracts
+
+**Documentation:**
+- 📖 [DOCKER.md](DOCKER.md) - Complete Docker guide
+- 🚀 [DOCKER-QUICKSTART-ES.md](DOCKER-QUICKSTART-ES.md) - Guía rápida en español
+
+---
+
+### 💻 Manual Installation (Advanced)
+
+If you prefer to install dependencies manually:
+
 1. **Clone + install JS deps**
    ```bash
    git clone https://github.com/omarespejel/tongo-ukraine-donations.git

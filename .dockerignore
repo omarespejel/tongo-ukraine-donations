@@ -1,0 +1,89 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Node modules (will be installed in container)
+node_modules
+npm-debug.log
+yarn-error.log
+bun.lockb
+
+# Build outputs (will be generated in container)
+dist
+*.tsbuildinfo
+
+# Environment files (should be mounted, not copied)
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing
+coverage
+.nyc_output
+*.lcov
+
+# Temporary files
+tmp
+temp
+*.tmp
+*.temp
+
+# Documentation (not needed in container)
+*.md
+!README.md
+LICENSE
+CHANGELOG.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Docker files (avoid recursion)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# ZK artifacts that will be regenerated
+zk-badges/donation_badge/target/witness.gz
+zk-badges/donation_badge/target/proof
+zk-badges/donation_badge/target/vk
+zk-badges/calldata.txt
+
+# Cairo build artifacts (will be regenerated)
+donation_badge_verifier/target
+
+# Deployment secrets
+deployments/*.secrets
+*.pem
+*.key
+accounts.json
+
+# Misc
+.npmignore
+.editorconfig
+.prettierrc
+.eslintrc*

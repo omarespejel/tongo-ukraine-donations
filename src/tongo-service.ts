@@ -59,20 +59,20 @@ function isValidTongoPrivateKey(key: string): boolean {
   try {
     const keyBigInt = BigInt(key);
     const starkCurveOrder = BigInt('3618502788666131213697322783095070105526743751716087489154079457884512865583');
-    
+
     // Key must be in range [1, n)
     if (keyBigInt < 1n) {
       console.warn('[TONGO] Key is too small - must be >= 1');
       return false;
     }
-    
+
     if (keyBigInt >= starkCurveOrder) {
       console.warn('[TONGO] Key is outside valid range for Stark curve');
       console.warn('[TONGO] Valid range: 1 to', starkCurveOrder.toString());
       console.warn('[TONGO] Your key:', keyBigInt.toString());
       return false;
     }
-    
+
     return true;
   } catch (error) {
     console.warn('[TONGO] Failed to parse key as hex:', error);
@@ -105,7 +105,7 @@ export class TongoService {
     // The SDK converts addresses to numbers for calldata, and unpadded addresses lose leading zeros
     this.tongoContractAddress = padAddress(tongoContractAddress);
     this.strkAddress = strkAddress;
-    
+
     // Use provided key or fallback to getter (Node.js only)
     const key = tongoPrivateKeyOverride || getDefaultTongoPrivateKey();
     if (!key || key === '0x0000000000000000000000000000000000000000000000000000000000000000') {
@@ -115,7 +115,7 @@ export class TongoService {
     // ✅ VALIDATE KEY BEFORE USING
     console.log('[TONGO] Validating Tongo private key...');
     if (!isValidTongoPrivateKey(key)) {
-      const errorMsg = 
+      const errorMsg =
         `Invalid Tongo private key. ` +
         `The key must be a valid scalar on the Stark curve. ` +
         `Generate a new one: node -e "console.log('0x' + require('crypto').randomBytes(32).toString('hex'))"`;
@@ -128,11 +128,11 @@ export class TongoService {
     try {
       console.log('[TONGO] Creating TongoAccount...');
       console.log('[TONGO] Tongo contract address (padded):', this.tongoContractAddress);
-    this.tongoAccount = new TongoAccount(
+      this.tongoAccount = new TongoAccount(
         key,
         this.tongoContractAddress,  // Use padded address so SDK generates correct approve calls
-      provider as any
-    );
+        provider as any
+      );
       console.log('[TONGO] TongoAccount created successfully');
     } catch (error) {
       console.error('[TONGO] Failed to create TongoAccount:', error);
@@ -142,16 +142,16 @@ export class TongoService {
         `Make sure your Tongo private key is valid.`
       );
     }
-    
+
     // Get public key as string - handle different formats
     let publicKeyStr: string;
     try {
       const pk: any = this.tongoAccount.publicKey;
-      
+
       // Check if it's already a string
       if (typeof pk === 'string') {
         publicKeyStr = pk;
-      } 
+      }
       // Check if it's an object with x and y properties (elliptic curve point)
       else if (pk && typeof pk === 'object' && 'x' in pk && 'y' in pk) {
         // Convert point to hex format: 0x<x64hex><y64hex>
@@ -186,9 +186,9 @@ export class TongoService {
       console.error('[TONGO] Error getting public key:', error);
       publicKeyStr = 'Error: Could not serialize public key';
     }
-    
+
     console.log('[TONGO] Public key stored as:', publicKeyStr.substring(0, 50) + (publicKeyStr.length > 50 ? '...' : ''));
-    
+
     this.state = {
       tongoPublicKey: publicKeyStr,
       starknetAddress,
@@ -216,22 +216,22 @@ export class TongoService {
     const isMainnet = this.strkAddress.toLowerCase() === '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
     const tokenName = isMainnet ? 'USDC' : 'STRK';
     const tokenDecimals = isMainnet ? 6 : 18;
-    
+
     if (amountInToken <= 0n) {
       throw new Error('Amount must be greater than 0');
     }
-    
+
     let tokenAmount = amountInToken;
-    
+
     // Safety: if user accidentally passes 18-decimals on mainnet, normalize to 6 decimals
     if (isMainnet && tokenAmount >= BigInt(1e15)) {
       console.warn('[FUND] Detected very large USDC amount (likely 18 decimals). Converting down to 6 decimals.');
       tokenAmount = tokenAmount / BigInt(1e12);
     }
-    
+
     console.log(`[FUND] Funding account with ${(Number(tokenAmount) / Math.pow(10, tokenDecimals)).toFixed(tokenDecimals === 6 ? 2 : 6)} ${tokenName}`);
     console.log('[FUND] Token amount in base units:', tokenAmount.toString());
-    
+
     // Convert ERC20 amount -> Tongo amount using on-chain rate
     const tongoAmount = await this.tongoAccount.erc20ToTongo(tokenAmount);
     console.log('[FUND] Converted token amount to Tongo amount:', {
@@ -239,7 +239,7 @@ export class TongoService {
       tongoAmount: tongoAmount.toString()
     });
     console.log('[FUND] Using Tongo amount for proofs:', tongoAmount.toString());
-    
+
     // Tongo proofs expect Tongo amount to fit in 32 bits
     const MAX_32_BIT = BigInt(2147483647);
     if (tongoAmount > MAX_32_BIT) {
@@ -248,25 +248,25 @@ export class TongoService {
     if (tongoAmount <= 0n) {
       throw new Error('Converted amount must be greater than 0');
     }
-    
+
     try {
       // Step 1: Verify TongoAccount is properly initialized
       console.log('[FUND] Verifying TongoAccount initialization...');
       console.log('[FUND] TongoAccount public key:', this.tongoAccount.publicKey);
       console.log('[FUND] TongoAccount contract:', this.tongoContractAddress);
       console.log('[FUND] Executor address:', this.starknetAccount.address);
-      
+
       // Step 2: Create Fund operation with Tongo SDK
       // The SDK handles ZK proof generation internally
       // KEY FIX: Use the Starknet account address as sender (must match executor)
       const isMainnet = this.strkAddress.toLowerCase() === '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
       const tokenName = isMainnet ? 'USDC' : 'STRK';
-      
+
       // NEW: Extra debug context before calling tongoAccount.fund
       // CRITICAL: Verify addresses match before proceeding
       const executorAddress = this.starknetAccount.address;
       const serviceAddress = this.starknetAddress;
-      
+
       console.log('[FUND] Debug context before tongoAccount.fund:', {
         isMainnet,
         tokenName,
@@ -280,24 +280,24 @@ export class TongoService {
         accountType: this.starknetAccount.constructor.name,
         accountHasExecute: typeof this.starknetAccount.execute === 'function',
       });
-      
+
       // CRITICAL CHECK: Verify executor matches service address
       // Both must be padded for accurate comparison
       const paddedExecutor = padAddress(executorAddress);
       const paddedService = padAddress(serviceAddress);
-      
+
       console.log('[FUND] Padded addresses for comparison:', {
         paddedExecutor,
         paddedService,
         match: paddedExecutor.toLowerCase() === paddedService.toLowerCase()
       });
-      
+
       if (paddedExecutor.toLowerCase() !== paddedService.toLowerCase()) {
         const errorMsg = `Address mismatch: Executor (${paddedExecutor}) != Service (${paddedService}). This will cause "NotOwner" error.`;
         console.error('[FUND] ❌', errorMsg);
         throw new Error(errorMsg);
       }
-      
+
       console.log('[FUND] ✅ Address verification passed - executor matches service address (padded)');
       console.log('[FUND] Creating fund operation with amount:', tongoAmount.toString(), tokenName);
       // CRITICAL: Use wallet's EXACT address format (no padding) so ZK proof matches transaction sender
@@ -338,7 +338,7 @@ export class TongoService {
         if (cd.length > 0) console.log('[FUND-DEBUG] calldata[0] (pubkey_x):', cd[0]);
         if (cd.length > 1) console.log('[FUND-DEBUG] calldata[1] (pubkey_y):', cd[1]);
         if (cd.length > 2) console.log('[FUND-DEBUG] calldata[2] (amount):', cd[2]);
-        
+
         // Log first 15 elements
         const maxElements = Math.min(cd.length, 15);
         for (let i = 0; i < maxElements; i++) {
@@ -360,8 +360,8 @@ export class TongoService {
       console.log('[FUND] Fund operation created successfully');
 
       // Step 2: Get approve call from operation
-    const approveCall = fundOperation.approve;
-    if (!approveCall) {
+      const approveCall = fundOperation.approve;
+      if (!approveCall) {
         throw new Error('Approve call not generated by SDK');
       }
 
@@ -372,17 +372,17 @@ export class TongoService {
         calldata: approveCall.calldata,
         calldataLength: approveCall.calldata?.length
       });
-      
+
       // DEEP DEBUG: Check approve calldata
       if (approveCall.calldata && Array.isArray(approveCall.calldata)) {
         const spenderRaw = approveCall.calldata[0];
-        const spenderValue = typeof spenderRaw === 'string' || typeof spenderRaw === 'number' || typeof spenderRaw === 'bigint' 
-          ? spenderRaw 
+        const spenderValue = typeof spenderRaw === 'string' || typeof spenderRaw === 'number' || typeof spenderRaw === 'bigint'
+          ? spenderRaw
           : String(spenderRaw);
         // CRITICAL: Pad hex to 66 chars (0x + 64 hex) to preserve leading zeros
         const spenderHexUnpadded = BigInt(spenderValue).toString(16);
         const spenderHex = '0x' + spenderHexUnpadded.padStart(64, '0');
-        
+
         console.log('[FUND-DEBUG] Approve calldata details:', {
           spender: spenderValue,
           spenderHexUnpadded: '0x' + spenderHexUnpadded,
@@ -390,7 +390,7 @@ export class TongoService {
           amount: approveCall.calldata[1],
           extra: approveCall.calldata[2]
         });
-        
+
         // Verify spender address matches Tongo contract (both padded)
         const tongoContractLower = this.tongoContractAddress.toLowerCase();
         const spenderLower = spenderHex.toLowerCase();
@@ -402,35 +402,35 @@ export class TongoService {
           spenderLength: spenderLower.length,
           contractLength: tongoContractLower.length
         });
-        
+
         if (!match) {
           console.error('[FUND-DEBUG] ❌ SPENDER ADDRESS MISMATCH! This will cause "NowOwner" error.');
           console.error('[FUND-DEBUG] The SDK generated approve call with wrong spender address format.');
         }
       }
-      
+
       // CRITICAL FIX: Patch approve call calldata to use correct padded Tongo contract address
       // The SDK converts addresses to numbers, which loses leading zeros
       // We need to ensure the spender address in approve calldata matches the padded Tongo contract
       if (approveCall.calldata && Array.isArray(approveCall.calldata) && approveCall.calldata.length >= 1) {
         const spenderRaw = approveCall.calldata[0];
-        const spenderValue = typeof spenderRaw === 'string' || typeof spenderRaw === 'number' || typeof spenderRaw === 'bigint' 
-          ? spenderRaw 
+        const spenderValue = typeof spenderRaw === 'string' || typeof spenderRaw === 'number' || typeof spenderRaw === 'bigint'
+          ? spenderRaw
           : String(spenderRaw);
         const spenderHexUnpadded = BigInt(spenderValue).toString(16);
         const spenderHex = '0x' + spenderHexUnpadded.padStart(64, '0');
         const tongoContractLower = this.tongoContractAddress.toLowerCase();
-        
+
         // If addresses don't match (due to missing leading zero), fix the calldata
         if (spenderHex.toLowerCase() !== tongoContractLower) {
           console.warn('[FUND] ⚠️ Patching approve calldata: spender address mismatch detected');
           console.warn('[FUND] Original spender:', spenderHex);
           console.warn('[FUND] Expected spender:', tongoContractLower);
-          
+
           // Convert padded Tongo contract address back to decimal for calldata
           const tongoContractDecimal = BigInt(this.tongoContractAddress).toString();
           approveCall.calldata[0] = tongoContractDecimal;
-          
+
           console.log('[FUND] ✅ Patched approve calldata with correct spender:', {
             original: spenderHex,
             patched: this.tongoContractAddress,
@@ -438,7 +438,7 @@ export class TongoService {
           });
         }
       }
-      
+
       // Check wallet balance before transaction
       try {
         const balance = await this.getWalletBalance();
@@ -448,7 +448,7 @@ export class TongoService {
           requestedAmount: amountInToken.toString(),
           hasEnoughBalance: balance >= amountInToken
         });
-        
+
         if (balance < amountInToken) {
           throw new Error(`Insufficient balance: ${isMainnet ? (Number(balance) / 1e6).toFixed(6) : (Number(balance) / 1e18).toFixed(6)} ${tokenName} < ${isMainnet ? (Number(amountInToken) / 1e6).toFixed(6) : (Number(amountInToken) / 1e18).toFixed(6)} ${tokenName}`);
         }
@@ -458,29 +458,29 @@ export class TongoService {
         }
         console.warn('[FUND-DEBUG] Could not check wallet balance:', balanceError);
       }
-      
+
       // CRITICAL FIX: Patch approve call calldata to use correct padded Tongo contract address
       // The SDK converts addresses to numbers, which loses leading zeros
       // We need to ensure the spender address in approve calldata matches the padded Tongo contract
       if (approveCall.calldata && Array.isArray(approveCall.calldata) && approveCall.calldata.length >= 1) {
         const spenderRaw = approveCall.calldata[0];
-        const spenderValue = typeof spenderRaw === 'string' || typeof spenderRaw === 'number' || typeof spenderRaw === 'bigint' 
-          ? spenderRaw 
+        const spenderValue = typeof spenderRaw === 'string' || typeof spenderRaw === 'number' || typeof spenderRaw === 'bigint'
+          ? spenderRaw
           : String(spenderRaw);
         const spenderHexUnpadded = BigInt(spenderValue).toString(16);
         const spenderHex = '0x' + spenderHexUnpadded.padStart(64, '0');
         const tongoContractLower = this.tongoContractAddress.toLowerCase();
-        
+
         // If addresses don't match (due to missing leading zero), fix the calldata
         if (spenderHex.toLowerCase() !== tongoContractLower) {
           console.warn('[FUND] ⚠️ Patching approve calldata: spender address mismatch detected');
           console.warn('[FUND] Original spender:', spenderHex);
           console.warn('[FUND] Expected spender:', tongoContractLower);
-          
+
           // Convert padded Tongo contract address back to decimal for calldata
           const tongoContractDecimal = BigInt(this.tongoContractAddress).toString();
           approveCall.calldata[0] = tongoContractDecimal;
-          
+
           console.log('[FUND] ✅ Patched approve calldata with correct spender:', {
             original: spenderHex,
             patched: this.tongoContractAddress,
@@ -488,19 +488,19 @@ export class TongoService {
           });
         }
       }
-      
+
       console.log('[FUND] Executing approve + fund calls atomically...');
-      
+
       // Step 3: Build fund call from operation
       // The approve call tells USDC/STRK contract: "Let Tongo contract spend my tokens"
       // The fund call tells Tongo contract: "Convert my tokens to encrypted balance"
       let fundCall: Call;
-      
+
       if (typeof fundOperation.toCalldata === 'function') {
         try {
           const callResult = fundOperation.toCalldata();
           console.log('[FUND] toCalldata() returned:', callResult);
-          
+
           if (callResult && typeof callResult === 'object' && 'contractAddress' in callResult && 'entrypoint' in callResult) {
             fundCall = callResult as Call;
             console.log('[FUND] Using Call object from toCalldata()');
@@ -531,40 +531,40 @@ export class TongoService {
         };
         console.log('[FUND] Using fallback Call object');
       }
-      
+
       console.log('[FUND] Constructed fundCall:', {
         contractAddress: fundCall.contractAddress,
         entrypoint: fundCall.entrypoint,
         calldataLength: fundCall.calldata?.length || 0
       });
-      
+
       // Execute both calls atomically
       const tx = await this.starknetAccount.execute([
         approveCall,
         fundCall
       ]);
-      
+
       console.log('[FUND] Transaction submitted:', tx.transaction_hash);
-      const explorerUrl = isMainnet 
+      const explorerUrl = isMainnet
         ? `https://starkscan.co/tx/${tx.transaction_hash}`
         : `https://sepolia.starkscan.co/tx/${tx.transaction_hash}`;
       console.log('[FUND] View on Starkscan:', explorerUrl);
-      
+
       // Wait for tx to complete
       await new Promise(r => setTimeout(r, 3000));
-      
+
       // Refresh state
       await this.refreshState();
-    
-    return tx.transaction_hash;
+
+      return tx.transaction_hash;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[FUND] Error:', error);
-      
+
       // Parse Tongo SDK errors
       const isMainnet = this.strkAddress.toLowerCase() === '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
       const tokenName = isMainnet ? 'USDC' : 'STRK';
-      
+
       if (errorMessage.includes('NotOwner') || errorMessage.includes('NowOwner')) {
         console.error('[FUND] NotOwner error - token approval failed');
         console.error('[FUND] This means:');
@@ -576,11 +576,11 @@ export class TongoService {
           'Try: 1) Check wallet balance, 2) Switch to correct network in dropdown, 3) Reload page'
         );
       }
-      
+
       if (errorMessage.includes('Insufficient balance')) {
         throw new Error(`Insufficient ${tokenName} balance. You need more ${tokenName} in your wallet.`);
       }
-      
+
       if (errorMessage.includes('PubKey is not an EcPoint') || errorMessage.includes('EcPoint')) {
         console.error('[FUND] Public key format error - Tongo SDK may have generated invalid public key');
         throw new Error(
@@ -588,14 +588,14 @@ export class TongoService {
           'Try: Clear localStorage (localStorage.clear()) and refresh the page to generate a new Tongo key.'
         );
       }
-      
+
       if (errorMessage.includes('Proof Of Ownership failed') || errorMessage.includes('Proof') || errorMessage.includes('proof')) {
         console.error('[FUND] Proof error - likely Tongo SDK API issue or invalid key');
         throw new Error(
           'ZK proof generation failed. Try reloading page or checking Tongo key.'
         );
       }
-      
+
       // Check for gas/resource bounds errors
       if (errorMessage.includes('resource_bounds') || errorMessage.includes('gas') || errorMessage.includes('fee')) {
         console.error('[FUND] Gas/resource bounds error - Tongo SDK may have returned invalid calldata');
@@ -604,7 +604,7 @@ export class TongoService {
           'Try: Refresh the page and try again with a smaller amount.'
         );
       }
-      
+
       // Check for DEPLOY_ACCOUNT errors
       if (errorMessage.includes('DEPLOY_ACCOUNT') || errorMessage.includes('deploy')) {
         console.error('[FUND] Account deployment error - your wallet account may not be deployed');
@@ -613,7 +613,7 @@ export class TongoService {
           'Try: Make a small transaction first to deploy the account, or use a different wallet.'
         );
       }
-      
+
       throw new Error(`Fund failed: ${errorMessage}`);
     }
   }
@@ -634,7 +634,7 @@ export class TongoService {
     amountInToken: bigint  // ← CHANGE: Now receives token amount (USDC/STRK decimals)
   ): Promise<string> {
     // Determine if we're on mainnet (USDC) or testnet (STRK)
-    const isMainnet = this.strkAddress.toLowerCase() === 
+    const isMainnet = this.strkAddress.toLowerCase() ===
       '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
     const tokenName = isMainnet ? 'USDC' : 'STRK';
     const tokenDecimals = isMainnet ? 6 : 18;
@@ -652,7 +652,7 @@ export class TongoService {
     try {
       // Get current state to validate balance
       const accountState = await this.tongoAccount.state();
-      
+
       console.log('[TRANSFER] Balance check:', {
         currentBalance: accountState.balance.toString(),
         amountToSend: amountInTongo.toString(),
@@ -676,24 +676,24 @@ export class TongoService {
         }
       }
 
-    // Convert recipient public key string to PubKey format
-    const recipientPubKey = this.parsePublicKey(recipientPublicKey);
+      // Convert recipient public key string to PubKey format
+      const recipientPubKey = this.parsePublicKey(recipientPublicKey);
 
-    // Create Transfer operation
-    // SDK handles all ZK proof generation
-    // CRITICAL: Use wallet's EXACT address format (no padding) so ZK proof matches transaction sender
-    const transferOperation = await this.tongoAccount.transfer({
-      to: recipientPubKey,
-      amount: amountInTongo,
-      sender: this.starknetAccount.address  // Use wallet's exact address format (matches TX sender)
-    });
+      // Create Transfer operation
+      // SDK handles all ZK proof generation
+      // CRITICAL: Use wallet's EXACT address format (no padding) so ZK proof matches transaction sender
+      const transferOperation = await this.tongoAccount.transfer({
+        to: recipientPubKey,
+        amount: amountInTongo,
+        sender: this.starknetAccount.address  // Use wallet's exact address format (matches TX sender)
+      });
 
-    console.log('[TRANSFER] Generated Transfer operation:', transferOperation);
+      console.log('[TRANSFER] Generated Transfer operation:', transferOperation);
 
       // Handle toCalldata() return value - may be Call object or calldata array
       const transferCallResult = transferOperation.toCalldata();
       let transferCall: Call;
-      
+
       if (transferCallResult && typeof transferCallResult === 'object' && 'contractAddress' in transferCallResult) {
         transferCall = transferCallResult as Call;
       } else if (Array.isArray(transferCallResult)) {
@@ -705,15 +705,15 @@ export class TongoService {
       } else {
         throw new Error('Invalid transfer operation format');
       }
-      
+
       const tx = await this.starknetAccount.execute([transferCall]);
-    
-    console.log(`[TRANSFER] Transaction hash: ${tx.transaction_hash}`);
+
+      console.log(`[TRANSFER] Transaction hash: ${tx.transaction_hash}`);
 
       // Update state after transaction
       await this.refreshState();
-    
-    return tx.transaction_hash;
+
+      return tx.transaction_hash;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[TRANSFER] Error:', errorMessage);
@@ -730,19 +730,19 @@ export class TongoService {
    */
   async rolloverBalance(): Promise<string> {
     console.log('[ROLLOVER] Rolling over pending to current balance');
-    
+
     try {
-    // CRITICAL: Use wallet's EXACT address format (no padding) so ZK proof matches transaction sender
-    const rolloverOperation = await this.tongoAccount.rollover({
-      sender: this.starknetAccount.address  // Use wallet's exact address format (matches TX sender)
-    });
-    
-    console.log('[ROLLOVER] Generated Rollover operation:', rolloverOperation);
+      // CRITICAL: Use wallet's EXACT address format (no padding) so ZK proof matches transaction sender
+      const rolloverOperation = await this.tongoAccount.rollover({
+        sender: this.starknetAccount.address  // Use wallet's exact address format (matches TX sender)
+      });
+
+      console.log('[ROLLOVER] Generated Rollover operation:', rolloverOperation);
 
       // Handle toCalldata() return value - may be Call object or calldata array
       const rolloverCallResult = rolloverOperation.toCalldata();
       let rolloverCall: Call;
-      
+
       if (rolloverCallResult && typeof rolloverCallResult === 'object' && 'contractAddress' in rolloverCallResult) {
         rolloverCall = rolloverCallResult as Call;
       } else if (Array.isArray(rolloverCallResult)) {
@@ -754,15 +754,15 @@ export class TongoService {
       } else {
         throw new Error('Invalid rollover operation format');
       }
-      
+
       const tx = await this.starknetAccount.execute([rolloverCall]);
-    
-    console.log(`[ROLLOVER] Transaction hash: ${tx.transaction_hash}`);
+
+      console.log(`[ROLLOVER] Transaction hash: ${tx.transaction_hash}`);
 
       // Update state after transaction
       await this.refreshState();
-    
-    return tx.transaction_hash;
+
+      return tx.transaction_hash;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[ROLLOVER] Error:', errorMessage);
@@ -781,28 +781,28 @@ export class TongoService {
     console.log(`[WITHDRAW] Withdrawing ${amountInTongo} Tongo`);
 
     try {
-    // Get current state to validate balance
-    const accountState = await this.tongoAccount.state();
-    if (accountState.balance < amountInTongo) {
-      throw new Error(
-        `Insufficient balance: ${accountState.balance} < ${amountInTongo}`
-      );
-    }
+      // Get current state to validate balance
+      const accountState = await this.tongoAccount.state();
+      if (accountState.balance < amountInTongo) {
+        throw new Error(
+          `Insufficient balance: ${accountState.balance} < ${amountInTongo}`
+        );
+      }
 
-    // Create Withdraw operation
-    // CRITICAL: Use wallet's EXACT address format (no padding) so ZK proof matches transaction sender
-    const withdrawOperation = await this.tongoAccount.withdraw({
-      amount: amountInTongo,
-      to: this.starknetAccount.address,     // Use wallet's exact address format (matches TX sender)
-      sender: this.starknetAccount.address  // Use wallet's exact address format (matches TX sender)
-    });
+      // Create Withdraw operation
+      // CRITICAL: Use wallet's EXACT address format (no padding) so ZK proof matches transaction sender
+      const withdrawOperation = await this.tongoAccount.withdraw({
+        amount: amountInTongo,
+        to: this.starknetAccount.address,     // Use wallet's exact address format (matches TX sender)
+        sender: this.starknetAccount.address  // Use wallet's exact address format (matches TX sender)
+      });
 
-    console.log('[WITHDRAW] Generated Withdraw operation:', withdrawOperation);
+      console.log('[WITHDRAW] Generated Withdraw operation:', withdrawOperation);
 
       // Handle toCalldata() return value - may be Call object or calldata array
       const withdrawCallResult = withdrawOperation.toCalldata();
       let withdrawCall: Call;
-      
+
       if (withdrawCallResult && typeof withdrawCallResult === 'object' && 'contractAddress' in withdrawCallResult) {
         withdrawCall = withdrawCallResult as Call;
       } else if (Array.isArray(withdrawCallResult)) {
@@ -814,15 +814,15 @@ export class TongoService {
       } else {
         throw new Error('Invalid withdraw operation format');
       }
-      
+
       const tx = await this.starknetAccount.execute([withdrawCall]);
-    
-    console.log(`[WITHDRAW] Transaction hash: ${tx.transaction_hash}`);
+
+      console.log(`[WITHDRAW] Transaction hash: ${tx.transaction_hash}`);
 
       // Update state after transaction
       await this.refreshState();
-    
-    return tx.transaction_hash;
+
+      return tx.transaction_hash;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[WITHDRAW] Error:', errorMessage);
@@ -854,27 +854,27 @@ export class TongoService {
         entrypoint: 'balanceOf',
         calldata: [this.starknetAccount.address],
       });
-      
+
       // Parse the result - balanceOf returns Uint256 [low, high]
       // balanceResult can be string[] directly or an object with result property
       const result = (balanceResult as any).result || balanceResult;
       const balanceArray = Array.isArray(result) ? result : [result, '0x0'];
       const [low, high] = balanceArray;
-      
+
       // Convert Uint256 to BigInt
       const balanceValue = BigInt(low) + (BigInt(high) << 128n);
-      
+
       const isMainnet = this.strkAddress.toLowerCase() === '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
       const tokenDecimals = isMainnet ? 6 : 18;
       const tokenName = isMainnet ? 'USDC' : 'STRK';
-      
+
       console.log('[WALLET-BALANCE] Wallet balance:', {
         raw: balanceValue.toString(),
         decimals: tokenDecimals,
         humanReadable: (Number(balanceValue) / Math.pow(10, tokenDecimals)).toFixed(tokenDecimals === 6 ? 2 : 6),
         token: tokenName,
       });
-      
+
       return balanceValue;
     } catch (error) {
       console.error('[WALLET-BALANCE] Failed to fetch wallet balance:', error);
@@ -891,7 +891,7 @@ export class TongoService {
       console.log('[REFRESH] Tongo account:', this.tongoAccount);
       console.log('[REFRESH] Tongo contract address:', this.tongoContractAddress);
       console.log('[REFRESH] Starknet address:', this.starknetAddress);
-      
+
       // Get fresh account state from blockchain
       // Note: state() might be a method or property depending on SDK version
       let accountState: any;
@@ -900,11 +900,11 @@ export class TongoService {
       } else {
         accountState = await (this.tongoAccount as any).getState?.() || this.tongoAccount.state;
       }
-      
+
       console.log('[REFRESH] Raw account state object:', accountState);
       console.log('[REFRESH] Account state type:', typeof accountState);
       console.log('[REFRESH] Account state keys:', accountState ? Object.keys(accountState) : 'null');
-      
+
       // Log all properties for debugging
       if (accountState) {
         for (const key in accountState) {
@@ -912,23 +912,23 @@ export class TongoService {
           console.log(`[REFRESH] ${key}:`, value, typeof value, value?.toString?.());
         }
       }
-      
+
       // Determine if we're on mainnet (USDC) or testnet (STRK)
       const isMainnet = this.strkAddress.toLowerCase() === '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
       const tokenName = isMainnet ? 'USDC' : 'STRK';
       const tokenDecimals = isMainnet ? 6 : 18;
-      
+
       // Handle balance - Tongo stores in INTERNAL UNITS, not token decimals!
       if (accountState && ('balance' in accountState)) {
         const balanceValue = accountState.balance;
         if (balanceValue !== undefined && balanceValue !== null) {
-          const balance = typeof balanceValue === 'bigint' 
-            ? balanceValue 
+          const balance = typeof balanceValue === 'bigint'
+            ? balanceValue
             : BigInt(String(balanceValue));
-          
+
           // Store RAW Tongo balance (don't multiply by decimals!)
           this.state.currentBalance = balance;
-          
+
           // Convert to token amount for display
           try {
             const tokenAmount = await this.tongoAccount.tongoToErc20(balance);
@@ -945,18 +945,18 @@ export class TongoService {
         this.state.currentBalance = 0n;
         console.log('[REFRESH] No balance property found in account state');
       }
-      
+
       // Handle pending balance
       if (accountState && ('pending' in accountState)) {
         const pendingValue = accountState.pending;
         if (pendingValue !== undefined && pendingValue !== null) {
-          const pending = typeof pendingValue === 'bigint' 
-            ? pendingValue 
+          const pending = typeof pendingValue === 'bigint'
+            ? pendingValue
             : BigInt(String(pendingValue));
-          
+
           // Store RAW Tongo balance (don't multiply!)
           this.state.pendingBalance = pending;
-          
+
           // Convert to token amount for display
           try {
             const tokenAmount = await this.tongoAccount.tongoToErc20(pending);
@@ -973,18 +973,18 @@ export class TongoService {
         this.state.pendingBalance = 0n;
         console.log('[REFRESH] No pending property found in account state');
       }
-      
+
       // Handle nonce
       if (accountState && ('nonce' in accountState)) {
         const nonceValue = accountState.nonce;
         if (nonceValue !== undefined && nonceValue !== null) {
-          this.state.nonce = typeof nonceValue === 'number' 
-            ? nonceValue 
+          this.state.nonce = typeof nonceValue === 'number'
+            ? nonceValue
             : Number(nonceValue);
           console.log('[REFRESH] Nonce:', this.state.nonce);
         }
       }
-      
+
       console.log('[REFRESH] State updated successfully');
       console.log('[REFRESH] Final state:', {
         currentBalance: this.state.currentBalance.toString(),
@@ -1011,15 +1011,15 @@ export class TongoService {
     try {
       // Trim whitespace
       const trimmed = pubKeyString.trim();
-      
+
       // Try parsing as base58 (TongoAddress format) - no 0x prefix
       if (!trimmed.startsWith('0x')) {
         return pubKeyBase58ToAffine(trimmed);
       }
-      
+
       // Hex format - try to parse as affine coordinates
       const hexValue = trimmed.slice(2); // Remove 0x prefix
-      
+
       // If it's 128 hex chars (64 bytes), it's likely full affine coordinates
       if (hexValue.length === 128) {
         const xHex = hexValue.slice(0, 64);
@@ -1029,7 +1029,7 @@ export class TongoService {
           y: BigInt('0x' + yHex)
         };
       }
-      
+
       // If it's 66 hex chars (33 bytes), it's a compressed point
       // For Stark curve, compressed points need decompression
       // This is a simplified approach - in production, use proper curve library
@@ -1039,7 +1039,7 @@ export class TongoService {
           'or use base58 TongoAddress format. Expected format: 0x<x64hex><y64hex> (128 hex chars total)'
         );
       }
-      
+
       // If it's 64 hex chars, might be just x coordinate (unlikely but handle it)
       if (hexValue.length === 64) {
         throw new Error(
@@ -1047,7 +1047,7 @@ export class TongoService {
           '0x<x64hex><y64hex> (128 hex chars total) or use base58 TongoAddress format'
         );
       }
-      
+
       throw new Error(
         `Invalid hex format. Expected 128 hex chars (64 bytes each for x and y) ` +
         `or base58 TongoAddress format. Got ${hexValue.length} hex chars.`
@@ -1070,11 +1070,11 @@ export class TongoService {
     try {
       // Use SDK's conversion (reverse of erc20ToTongo)
       const tokenAmount = await this.tongoAccount.tongoToErc20(tongoAmount);
-      const isMainnet = this.strkAddress.toLowerCase() === 
+      const isMainnet = this.strkAddress.toLowerCase() ===
         '0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8';
       const tokenDecimals = isMainnet ? 6 : 18;
       const tokenName = isMainnet ? 'USDC' : 'STRK';
-      
+
       return `${(Number(tokenAmount) / Math.pow(10, tokenDecimals)).toFixed(tokenDecimals <= 6 ? 2 : 6)} ${tokenName}`;
     } catch (e) {
       // Fallback: assume 1:1 ratio with basic formatting
@@ -1088,7 +1088,7 @@ export class TongoService {
   async getMaxSendableAmount(): Promise<{ tongoUnits: bigint; tokenAmount: bigint; display: string }> {
     const accountState = await this.tongoAccount.state();
     const tongoUnits = accountState.balance;
-    
+
     try {
       const tokenAmount = await this.tongoAccount.tongoToErc20(tongoUnits);
       const display = await this.tongoToDisplayAmount(tongoUnits);
