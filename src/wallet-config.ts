@@ -22,7 +22,7 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
     name: 'Sepolia Testnet',
     rpcUrl: 'https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_9/cf52O0RwFy1mEB0uoYsel',
     // STRK wrapper (1:1 rate for testing)
-    tongoContractAddress: '0x00b4cca30f0f641e01140c1c388f55641f1c3fe5515484e622b6cb91d8cee585',
+    tongoContractAddress: '0x408163bfcfc2d76f34b444cb55e09dace5905cf84c0884e4637c2c0f06ab6ed',
     strkAddress: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d',
     chainId: 'SN_SEPOLIA'
   },
