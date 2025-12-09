@@ -1,0 +1,109 @@
+services:
+  # ============================================
+  # Main Application Service
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: starknet-privacy-toolkit
+    ports:
+      - "8080:8080"   # Vite dev server / Web frontend
+      - "3001:3001"   # Bun API server for proof generation
+    volumes:
+      # Mount source code for development (hot reload)
+      - ./src:/app/src
+      - ./api:/app/api
+      - ./public:/app/public
+      
+      # Mount ZK artifacts and circuits
+      - ./zk-badges:/app/zk-badges
+      - ./donation_badge_verifier:/app/donation_badge_verifier
+      
+      # Mount deployments and configuration
+      - ./deployments:/app/deployments
+      
+      # Mount environment file (create from .env.example)
+      - ./.env:/app/.env:ro
+      
+      # Persist node_modules to avoid reinstalling
+      - node_modules:/app/node_modules
+      
+      # Persist build artifacts
+      - dist:/app/dist
+      - zk_target:/app/zk-badges/donation_badge/target
+      - cairo_target:/app/donation_badge_verifier/target
+    environment:
+      - NODE_ENV=development
+      - STARKNET_RPC_URL=${STARKNET_RPC_URL:-https://sepolia.starknet.io/rpc/v0_8_1}
+      - TONGO_CONTRACT_ADDRESS=${TONGO_CONTRACT_ADDRESS:-0x00b4cca30f0f641e01140c1c388f55641f1c3fe5515484e622b6cb91d8cee585}
+      - STRK_ADDRESS=${STRK_ADDRESS:-0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d}
+    networks:
+      - starknet-network
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: sh -c "bun run api/server.ts & bun run dev:web"
+
+  # ============================================
+  # Optional: Dedicated API Service
+  # (Uncomment if you want to run API separately)
+  # ============================================
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: starknet-api
+  #   ports:
+  #     - "3001:3001"
+  #   volumes:
+  #     - ./api:/app/api
+  #     - ./zk-badges:/app/zk-badges
+  #     - ./donation_badge_verifier:/app/donation_badge_verifier
+  #     - ./.env:/app/.env:ro
+  #   environment:
+  #     - NODE_ENV=production
+  #   networks:
+  #     - starknet-network
+  #   restart: unless-stopped
+  #   command: bun run api/server.ts
+
+  # ============================================
+  # Optional: Nginx Reverse Proxy for Production
+  # ============================================
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: starknet-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./dist:/usr/share/nginx/html:ro
+  #   networks:
+  #     - starknet-network
+  #   depends_on:
+  #     - app
+  #   restart: unless-stopped
+
+# ============================================
+# Named Volumes for Persistence
+# ============================================
+volumes:
+  node_modules:
+    driver: local
+  dist:
+    driver: local
+  zk_target:
+    driver: local
+  cairo_target:
+    driver: local
+
+# ============================================
+# Network Configuration
+# ============================================
+networks:
+  starknet-network:
+    driver: bridge

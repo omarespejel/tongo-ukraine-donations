@@ -17,8 +17,9 @@ export default defineConfig({
     }
   },
   server: {
+    host: '0.0.0.0', // Listen on all network interfaces (required for Docker)
     port: 8080,
-    open: true,
+    open: false, // Don't try to open browser in Docker
     cors: true,
   },
   resolve: {
