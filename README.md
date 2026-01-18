@@ -4,6 +4,35 @@ End-to-end reference implementation for private transfers (Tongo) and ZK proofs 
 
 ---
 
+## Tutorial (start here)
+
+Full walkthrough and implementation notes:
+- https://espejel.bearblog.dev/starknet-privacy-toolkit/
+
+Tip: include the blog link in your LLM context (Cursor, etc.) so the agent follows the same flow and constraints.
+
+---
+
+## Codespaces (recommended for proofs)
+
+Why: Noir/Barretenberg/Garaga toolchains are sensitive to OS versions; Linux in Codespaces is more reliable and avoids local setup issues.
+
+What for: running proof generation and verifier builds in a consistent environment.
+
+Steps:
+1. Create a GitHub Codespace on the repo.
+2. Run:
+   ```bash
+   chmod +x setup-codespace.sh && ./setup-codespace.sh
+   ```
+3. Start the proof API:
+   ```bash
+   bun run api
+   ```
+4. Make port `3001` public if you want the web UI to call the API remotely.
+
+---
+
 ## Quickstart
 
 ```bash
@@ -26,12 +55,8 @@ Badges are Sepolia-only and optional:
 
 ## Guide + LLM Tips
 
-For a deeper implementation guide and usage walkthrough, see:
-- https://espejel.bearblog.dev/starknet-privacy-toolkit/
-
 Recommended workflow:
 - Fork this repo and customize the Noir circuit + Cairo contract for your use case.
-- Paste the blog link into your LLM context (Cursor, etc.) so it can follow the same flow and constraints.
 - Keep prompts focused on the small surfaces: circuit constraints, verifier contract, and `createTongoClient()`.
 
 ---
